@@ -19,9 +19,8 @@
 # in the templates via {{ site.myvariable }}.
 
 title: Kurt Smith
-name: "Kurt's Tech Notes"
 description: Writeups of my side projects.
-baseurl: "/docs" # the subpath of your site, e.g. /blog
+baseurl: "" # the subpath of your site, e.g. /blog
 url: "" # the base hostname & protocol for your site, e.g. http://example.com
 # profile_url: "http://kurtosis.github.io"
 twitter_username: kurtosis0
