@@ -25,6 +25,7 @@ url: "" # the base hostname & protocol for your site, e.g. http://example.com
 # profile_url: "http://kurtosis.github.io"
 twitter_username: kurtosis0
 github_username:  kurtosis
+linkedin_username: kurtasmith
 
 # Build settings
 theme: minima
