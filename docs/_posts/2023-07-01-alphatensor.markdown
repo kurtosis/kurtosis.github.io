@@ -105,14 +105,19 @@ In Strassen's algorithm for instance $$a_1b_4$$ contributes to three intermediat
 
 ## Reward function
 
-Since our goal is to minimize the number of steps taken to reach $$SS=0$$ it is natural to use a reward of $-n$ when this state is reached on the $$n$$th step. On its own, this is a very sparse reward of course - we will only receive feedback when we succeed in finding a decomposition! Practically speaking we would like to cap the length of each trajectory and still recieve useful feedback.
+Since the goal is to minimize the number of steps taken to reach $$S=0$$, AlphaTensor provides a reward of $$-1$$ for each step taken. In practice, games are terminated after a finite number ($$R_{limit}$$) of steps. If we still have a non-zero tensor $$S$$ at this point, an additional reward of $$-\gamma(S)$$ is given, equal to "an upper bound on the rank of the terminal tensor." In simpler terms, $$\gamma(S)$$ is the number of non-zero entries remaining in $$S$$ since we know that each of these could be eliminated by a single update. Note that this terminal reward plays an important role in creating a dense reward function. Without it, the agend would only recieve useful feedback when it reaches the zero tensor within $$R_{limit}$$ steps - a sparse reward on its own.
+
+## Supervised learning
+
+While it is NP-hard to decompose a given tensor $$T$$ into factors, it is straightfoward to do the inverse: to construct a tensor $$D$$ from a given set of factors $$\{(\bf{u}^{(r)}, \bf{v}^{(r)}, \bf{w}^{(r)})\}^{R}_{r=1}$$. This suggests a way to create synthetic demonstrations for supervised training - a set of factors is sampled from some distribution, and the related tensor $$D$$ is given as an initial condition to the actor network, which is then trained to output the correct factors. AlphaTensor generates a large dataset of such demonstrations and uses a mixed training strategy, alternating between training on supervised loss on the demonstrations and reinforcement learning loss on the target tensor $$T$$. This was found to substantially outperform either strategy separately.
 
 
-Learn a strategy to make a move for each input
-The goal is to get a matrix to zero - we can provide some training examples
-We also can let it explore and give feedback, score
+## The Policy and Value Networks
 
-reward - not just all or nothing, approximate reward, upper bound
+...
+
+## Exploration via Monte Carlo Tree Search
+...
 
 
 [alphatensor-blog]: https://www.deepmind.com/blog/discovering-novel-algorithms-with-alphatensor
