@@ -5,7 +5,13 @@ date:   2023-07-01 14:23:37 -0400
 categories: alphatensor
 usemathjax: true
 ---
-DeepMind announced [AlphaTensor][alphatensor-blog] in October 2022 ([Nature publication][alphatensor-nature]). I have implemented the algorithm [here][my-repo]
+
+DeepMind's AlphaTensor system ([blog][alphatensor-blog], [paper][alphatensor-nature]), introduced in October, 2022 uses a deep reinforcement learning to discover efficient algorithms for matrix multiplication. It has, perhaps understandably, not received the same level of attention as recent advances in generative AI. However, there are a few aspects of this work which I think make it a particularly interesting application of deep learning:
+* The complexity of the problem comes from its underlying mathematical structure and is not related to extracting information from large empirical data sets as is common with text, image, omics and other areas.
+* This is a single player game which, at first glance, is very much a "find a needle in a haystack" sort of problem. Unlike complex two-player games, such as chess and go, it cannot benefit from self-play to bootstrap improvements
+* DeepMind's solution involved multiple novel techniques were used, such as a transformer network to select actions from a high dimensional, discrete space, to Monte Carlo tree search to solve the reinforcement learning problem.
+
+In this post I'll break down the matrix multiplication problem and walk through my implementation of AlphaTensor, available [here][my-repo].
 
 
 # Addition and Multiplication
@@ -117,6 +123,7 @@ While it is NP-hard to decompose a given tensor $$T$$ into factors, it is straig
 ...
 
 ## Exploration via Monte Carlo Tree Search
+used in [AlphaZero][alphazero] and extended [here][muzero]
 ...
 
 
@@ -124,3 +131,5 @@ While it is NP-hard to decompose a given tensor $$T$$ into factors, it is straig
 [alphatensor-nature]: https://www.nature.com/articles/s41586-022-05172-4
 [my-repo]: [https://github.com/kurtosis/mat_mul]
 [strassen]: [https://eudml.org/doc/131927]
+[alphazero]: [https://www.science.org/doi/10.1126/science.aar6404]
+[muzero]: [https://arxiv.org/abs/2104.06303]
