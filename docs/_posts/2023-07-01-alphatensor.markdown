@@ -133,12 +133,16 @@ The torso is based on a modification of transformers. The three-dimensional inpu
 
 ### Policy Head
 
+The policy head is responsible for converting the torso's output into a distribution over the action space of the factors $$\{ {\bf u,  v,  w}\}$$ which we can run backpropagation on (during the training step) and sample from (during the action step used in MCTS). However, this action space is far too large for us to represent the distribution explicitly. Consider multiplication of $$5 \times 5$$ matrices. In this case each factor is of length $$25$$. In the AlphaTensor paper, entries in the factors are restricted to the five values $$(-2, -1, 0, 1, 2)$$. Thus the cardinality of the action space is $$5^{3 \cdot 25} \approx 10^{52}$$.
+
+The solution is to use a transformer architecture to represent an autoregressive policy. In other words, an action is produced sequentially, with each token in the factors drawn from a distribution that is conditioned on the previous tokens (via self-attention), as well as on the embedding produced by the torso (via cross-attention). Naively, we might treat each of the $$75$$ entries in the three factors as a token. However, now we have moved from an enormous action space to the opposite extreme, a transformer with a vocabulary size of only $$5$$! Recall that transformers learn embeddings for each "word" in the vocabulary- the benefit of this is most evident for larger vocabularies. Note that for any sequential data, we can use various representations that trade off between vocabulary size and sequence length. In this example, we can split the factors into chunks of 5 entries and represent each chunk as a token. With this approach, the vocabulary size (i.e. the number of distinct values a chunk can take on) increases to $$5^5 = 3125$$ and the sequence length decreases to $$15$$. The vocabulary size is still small enough to learn token embeddings over, but we have also reduced the context length that the transformer must learn to attend to.
+
 
 ![](/assets/images/policy_head.png){: width="600"}
 
 ### Value Head
 
-The value head is a multilayer perceptron whose output is an estimate of the distribution of returns from the current state. This is expressed as a series of evenly spaced quantile values. [distributional-rl]
+The value head is a multilayer perceptron whose output is an estimate of the distribution of returns from the current state. This is expressed as a series of evenly spaced quantile values. The value head is trained against ground truth values using  [quantile regression][code-quantile] ([reference][distributional-rl]).
 
 ![](/assets/images/value_head.png){: width="600"}
 
@@ -171,4 +175,5 @@ Now that we have all the main parts, let's put them together!
 [code-value]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L211
 [code-policy]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L283
 [code-attention]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L71
+[code-quantile]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L300
 
