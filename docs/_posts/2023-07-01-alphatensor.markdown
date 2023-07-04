@@ -9,9 +9,9 @@ usemathjax: true
 DeepMind's AlphaTensor system ([blog][alphatensor-blog], [paper][alphatensor-nature]), introduced in October, 2022 uses a deep reinforcement learning to discover efficient algorithms for matrix multiplication. It has, perhaps understandably, not received the same level of attention as recent advances in generative AI. However, there are a few aspects of this work which I think make it a particularly interesting application of deep learning:
 * The complexity of the problem comes from its underlying mathematical structure and is not related to extracting information from large empirical data sets as is common with text, image, omics and other areas.
 * This is a single player game which, at first glance, is very much a "find a needle in a haystack" sort of problem. Unlike complex two-player games, such as chess and go, it cannot benefit from self-play to bootstrap improvements
-* DeepMind's solution involved multiple novel techniques were used, such as a transformer network to select actions from a high dimensional, discrete space, to Monte Carlo tree search to solve the reinforcement learning problem.
+* AlphaTensor involves multiple novel techniques, such as a transformer network to select actions from a high dimensional, discrete space and Monte Carlo tree search to solve the reinforcement learning problem.
 
-In this post I'll break down the matrix multiplication problem and walk through my implementation of AlphaTensor, available [here][my-repo].
+In this post I'll break down the matrix multiplication problem and walk through [my implementation][my-repo] of AlphaTensor. (All figures below are from the AlphaTensor paper.)
 
 
 # Addition and Multiplication
@@ -25,9 +25,9 @@ Clearly the multiplication would be harder (you might even be able to do the add
 
 Consider two integers of N digits each. The cost of adding these numbers is $$O(N)$$ - we first add the digits in the ones place, then those in the tens place, etc. The cost of multiplying the numbers is $$O(N^2)$$ - we must multiply the "ones" digit of the first number by every digit in the second number, then do the same for the "tens" digit, etc. More generally, if we denote the magnitude of an integer as $$M$$ then the number of digits scales as $$log(M)$$. Thus, addition is $$O(log(M))$$ and multiplication is $$O(log(M)^2)$$. The key point here is the quadratic relation between multiplication and addition - this holds whether the numbers are of different magnitudes, are expressed in bits rather than base 10, or are floating point rather than integers.
 
-Another point to consider is the number of operations. Consider calculating the following:\
+Next, let's consider is the number of operations required to resolve an arithmetic expression. Consider calculating the following:\
 $$(15047 + 30821) \times (39012 + 82615)$$\
-Most of us would instinctively perform two additions followed by a single multiplication, rather than the more arduous task of four multiplications followed by three additions (or one addition, followed by two multiplications, followed by another addition). The key point here is that for complex arithmetic calculations there are multiple paths to arrive at the answer, some of which are more efficient than others. While each operation has a cost, generally reducing the number of multiplications is most important to reducing the overall cost.
+Most of us would instinctively perform two additions followed by a single multiplication, rather than the more arduous task of four multiplications followed by three additions (or one addition, followed by two multiplications, followed by another addition). The key point is that for complex arithmetic calculations there are multiple paths to arrive at the answer, some of which are more efficient than others. While each operation has a cost, generally reducing the number of multiplications is most important to reducing the overall cost.
 
 # Matrix Multiplication
 
@@ -65,14 +65,12 @@ $$T_{i, j, 1} = 0 \space \forall \space \text{other} \space (i, j)$$\
 and similarly for $$c_2$$, $$c_3$$, and $$c_4$$.
 
 
-Consider a process in which we first set a tensor $$S$$ equal to the zero tensor and then sequentially modify it by choosing three vectors $$\bf{u}$$, $$\bf{v}$$, and $$\bf{w}$$, each of length 4, and performing the following update:\
+Consider a process in which we first set a tensor $$S$$ equal to the zero tensor and then sequentially modify it by choosing three vectors $${\bf u}$$, $${\bf v}$$, and $${\bf w}$$, each of length 4, and performing the following update:\
 $$S_{i, j, k} \leftarrow S_{i, j, k} + u_iv_jw_k$$
 
 
 For example, applying the following vectors to $$S=0$$:\
-$$u = (1, 0, 0, 1)$$\
-$$v = (1, 0, 0, 1)$$\
-$$w = (1, 0, 0, 1)$$\
+$${\bf u =  v = w} = (1, 0, 0, 1)$$\
 results in:\
 $$S_{1, 1, 1} = 1$$\
 $$S_{1, 1, 4} = 1$$\
@@ -96,14 +94,13 @@ We can stack these vectors into three matrices $$U$$, $$V$$, and $$W$$ Following
 
 # Describing this as a game
 
-It should now be clearer how this can be cast as a reinforcement learning problem. It will be more convenient to set the initial state as $$S=T$$ and subtract, rather than add, the $${u,v,w}$$ contributions at each step. Our goal is to find the smallest number steps necessary to arrive at $$S=0$$.
+It should now be clearer how this can be cast as a reinforcement learning problem. It will be more convenient to set the initial state as $$S=T$$ and subtract, rather than add, the $${\bf u}$$, $${\bf v}$$, and $${\bf w}$$ contributions at each step. Our goal is to find the smallest number steps necessary to arrive at $$S=0$$.
 
 At first glance it might seem that there is little coherent structure to efficient algorithms and given the discrete nature of the steps it will be hard to do better than trial-and-error.
-In Strassen's algorithm for instance $$a_1b_4$$ contributes to three intermediate variables ($$m_1$$, $$m_3$$, and $$m_5$$) despite not contributing to any of the elements of $C$.
+In Strassen's algorithm for instance $$a_1b_4$$ contributes to three intermediate variables ($$m_1$$, $$m_3$$, and $$m_5$$) despite not contributing to any of the elements of $$C$$.
 
 
-
-1. Build a policy model to choose an action $$\{u, v, w\}$$ given a state $$S$$.
+1. Build a policy model to choose an action $$\{ {\bf u,  v,  w}\}$$ given a state $$S$$.
 2. Define a sufficiently dense reward function to provide feedback to the policy model.
 3. Develop a RL/exploration algorithm to efficiently search for low-rank decompositions.
 4. Supplement the RL problem with a supervised learning problem on known decompositions.
@@ -111,14 +108,40 @@ In Strassen's algorithm for instance $$a_1b_4$$ contributes to three intermediat
 
 ## Reward function
 
-Since the goal is to minimize the number of steps taken to reach $$S=0$$, AlphaTensor provides a reward of $$-1$$ for each step taken. In practice, games are terminated after a finite number ($$R_{limit}$$) of steps. If we still have a non-zero tensor $$S$$ at this point, an additional reward of $$-\gamma(S)$$ is given, equal to "an upper bound on the rank of the terminal tensor." In simpler terms, $$\gamma(S)$$ is the number of non-zero entries remaining in $$S$$ since we know that each of these could be eliminated by a single update. Note that this terminal reward plays an important role in creating a dense reward function. Without it, the agend would only recieve useful feedback when it reaches the zero tensor within $$R_{limit}$$ steps - a sparse reward on its own.
+Since the goal is to minimize the number of steps taken to reach $$S=0$$, AlphaTensor provides a reward of $$-1$$ for each step taken. In practice, games are terminated after a finite number ($$R_{limit}$$) of steps. If we still have a non-zero tensor $$S$$ at this point, an additional reward of $$-\gamma(S)$$ is given, equal to "an upper bound on the rank of the terminal tensor." In simpler terms, $$\gamma(S)$$ is the number of non-zero entries remaining in $$S$$ since we know that each of these could be eliminated by a single update. Note that this terminal reward plays an important role in creating a dense reward function. Without it, the agend would only recieve useful feedback when it reaches the zero tensor within $$R_{limit}$$ steps - a sparse reward on its own. ([Implementation of terminal reward][code-terminal-reward])
 
 ## Supervised learning
 
-While it is NP-hard to decompose a given tensor $$T$$ into factors, it is straightfoward to do the inverse: to construct a tensor $$D$$ from a given set of factors $$\{(\bf{u}^{(r)}, \bf{v}^{(r)}, \bf{w}^{(r)})\}^{R}_{r=1}$$. This suggests a way to create synthetic demonstrations for supervised training - a set of factors is sampled from some distribution, and the related tensor $$D$$ is given as an initial condition to the actor network, which is then trained to output the correct factors. AlphaTensor generates a large dataset of such demonstrations and uses a mixed training strategy, alternating between training on supervised loss on the demonstrations and reinforcement learning loss on the target tensor $$T$$. This was found to substantially outperform either strategy separately.
+While it is NP-hard to decompose a given tensor $$T$$ into factors, it is straightfoward to do the inverse: to construct a tensor $$D$$ from a given set of factors $$\{({\bf u}^(r), {\bf v}^(r), {\bf w}^(r))\}^R_{r=1}$$. This suggests a way to create synthetic demonstrations for supervised training - a set of factors is sampled from some distribution, and the related tensor $$D$$ is given as an initial condition to the actor network, which is then trained to output the correct factors. AlphaTensor generates a large dataset of such demonstrations and uses a mixed training strategy, alternating between training on supervised loss on the demonstrations and reinforcement learning loss on the target tensor $$T$$. This was found to substantially outperform either strategy separately. ([Implementation of synthetic demonstrations][code-synth-demos])
 
 
 ## The Policy and Value Networks
+
+The AlphaTensor network consists of three components:
+1. A [torso][code-torso], which takes information about the current state and produces an embedding.
+2. A [policy head][code-policy], which takes the embedding produced by the torso and generates a distribution over candidate actions.
+3. A [value head][code-value], which takes the embedding produced by the torso and generates a distribution over candidate actions.
+
+Pseudocode for each of these is provided in the [Supplementary Information][alphatensor-supplementary] to the paper. Below I will provide a brief outline with links to my implementation.
+
+![](/assets/images/network_architecture.png){: width="600"}
+
+### Torso
+
+The torso is based on a modification of transformers. The three-dimensional input tensors are projected onto three two-dimensional grids of feature vectors. These grids are passed through a sequence of [attention-based blocks][code-attention] which use a modified form of [axial attention][axial-attn]. These produce an embedding vector which is passed to the policy and value heads.
+
+
+### Policy Head
+
+
+![](/assets/images/policy_head.png){: width="600"}
+
+### Value Head
+
+The value head is a multilayer perceptron whose output is an estimate of the distribution of returns from the current state. This is expressed as a series of evenly spaced quantile values. [distributional-rl]
+
+![](/assets/images/value_head.png){: width="600"}
+
 
 ...
 
@@ -127,9 +150,25 @@ used in [AlphaZero][alphazero] and extended [here][muzero]
 ...
 
 
+## Training AlphaTensor
+
+Now that we have all the main parts, let's put them together!
+
+
 [alphatensor-blog]: https://www.deepmind.com/blog/discovering-novel-algorithms-with-alphatensor
 [alphatensor-nature]: https://www.nature.com/articles/s41586-022-05172-4
-[my-repo]: [https://github.com/kurtosis/mat_mul]
-[strassen]: [https://eudml.org/doc/131927]
-[alphazero]: [https://www.science.org/doi/10.1126/science.aar6404]
-[muzero]: [https://arxiv.org/abs/2104.06303]
+[alphatensor-supplementary]: https://static-content.springer.com/esm/art%3A10.1038%2Fs41586-022-05172-4/MediaObjects/41586_2022_5172_MOESM1_ESM.pdf
+[strassen]: https://eudml.org/doc/131927
+[alphazero]: https://www.science.org/doi/10.1126/science.aar6404
+[muzero]: https://arxiv.org/abs/2104.06303
+[axial-attn]: https://arxiv.org/abs/1912.12180
+[distributional-rl]: https://arxiv.org/abs/1710.10044
+
+[my-repo]: https://github.com/kurtosis/mat_mul
+[code-synth-demos]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/datasets.py#L20
+[code-terminal-reward]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/act.py#L59
+[code-torso]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L99
+[code-value]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L211
+[code-policy]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L283
+[code-attention]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L71
+
