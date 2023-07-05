@@ -6,28 +6,37 @@ categories: alphatensor
 usemathjax: true
 ---
 
-DeepMind's AlphaTensor system ([blog][alphatensor-blog], [paper][alphatensor-nature]), introduced in October, 2022 uses a deep reinforcement learning to discover efficient algorithms for matrix multiplication. It has, perhaps understandably, not received the same level of attention as recent advances in generative AI. However, there are a few aspects of this work which I think make it a particularly interesting application of deep learning:
-* The complexity of the problem comes from its underlying mathematical structure and is not related to extracting information from large empirical data sets as is common with text, image, omics and other areas.
-* This is a single player game which, at first glance, is very much a "find a needle in a haystack" sort of problem. Unlike complex two-player games, such as chess and go, it cannot benefit from self-play to bootstrap improvements
-* AlphaTensor involves multiple novel techniques, such as a transformer network to select actions from a high dimensional, discrete space and Monte Carlo tree search to solve the reinforcement learning problem.
+DeepMind's AlphaTensor system ([blog][alphatensor-blog], [paper][alphatensor-nature]), introduced in October, 2022 uses deep reinforcement learning to discover efficient algorithms for matrix multiplication. It has, perhaps understandably, not received the same level of attention as recent advances in generative AI. However, there are a few aspects of this work which I think make it a particularly interesting application of deep learning:
+* The complexity of the problem comes from its underlying mathematical structure. The challenge is not extracting information from large empirical data sets (e.g. text, image, omics) but solving an NP-hard problem. Also, unlike two-player games, such as chess and go, it cannot rely on self-play to provide continuous feedback and bootstrap improvements.
+* AlphaTensor uses several techniques to tackle the problem, such as a transformer network to select actions from a high dimensional, discrete space and Monte Carlo tree search (MCTS) to solve the reinforcement learning problem.
 
 In this post I'll break down the matrix multiplication problem and walk through [my implementation][my-repo] of AlphaTensor. (All figures below are from the AlphaTensor paper.)
 
 
 # Addition and Multiplication
 
-The importance of the order of operations stems from the simple fact that multiplication is a more expensive operation than addition. To build some intuition, consider which of the following arithmetic calculations would take more effort to solve:\
+The importance of the order of operations stems from the simple fact that multiplication is a more expensive operation than addition. To build some intuition, consider which of the following arithmetic calculations takes more effort for you to do:\
 $$15047 + 30821$$\
 or \
 $$15047 \times 30821$$
 
-Clearly the multiplication would be harder (you might even be able to do the addition in your head, but for the multiplication this would require a strong memory!).
+Clearly multiplication is more work (you might even be able to do the addition in your head, but for the multiplication this would require a strong memory!).
 
 Consider two integers of N digits each. The cost of adding these numbers is $$O(N)$$ - we first add the digits in the ones place, then those in the tens place, etc. The cost of multiplying the numbers is $$O(N^2)$$ - we must multiply the "ones" digit of the first number by every digit in the second number, then do the same for the "tens" digit, etc. More generally, if we denote the magnitude of an integer as $$M$$ then the number of digits scales as $$log(M)$$. Thus, addition is $$O(log(M))$$ and multiplication is $$O(log(M)^2)$$. The key point here is the quadratic relation between multiplication and addition - this holds whether the numbers are of different magnitudes, are expressed in bits rather than base 10, or are floating point rather than integers.
 
-Next, let's consider is the number of operations required to resolve an arithmetic expression. Consider calculating the following:\
-$$(15047 + 30821) \times (39012 + 82615)$$\
-Most of us would instinctively perform two additions followed by a single multiplication, rather than the more arduous task of four multiplications followed by three additions (or one addition, followed by two multiplications, followed by another addition). The key point is that for complex arithmetic calculations there are multiple paths to arrive at the answer, some of which are more efficient than others. While each operation has a cost, generally reducing the number of multiplications is most important to reducing the overall cost.
+
+Why does this observation matter? As it turns out, many calculations have multiple paths (i.e. sequences of scalar arithmetic operations) which produce the correct result. The number of paths increases with the size of the calculation and in general, paths with fewer multiplications are more efficient. As a simple example (courtesy of [Assembly AI][assembly-ai]) consider how we might compute the difference of two squares, $$a^2 - b^2$$. Both of these algorithms perform three operations and return the correct result:
+
+$$c_1 = a \cdot a$$\
+$$c_2 = b \cdot b$$\
+return $$c_1 - c2$$
+
+$$d_1 = a + b$$\
+$$d_2 = a - b$$\
+return $$d_1 \cdot d_2$$
+
+
+However the second one is more efficient because it requires one multiplication rather than two. (You can try timing this on your laptop to confirm!)
 
 # Matrix Multiplication
 
@@ -115,21 +124,30 @@ Since the goal is to minimize the number of steps taken to reach $$S=0$$, AlphaT
 While it is NP-hard to decompose a given tensor $$T$$ into factors, it is straightfoward to do the inverse: to construct a tensor $$D$$ from a given set of factors $$\{({\bf u}^(r), {\bf v}^(r), {\bf w}^(r))\}^R_{r=1}$$. This suggests a way to create synthetic demonstrations for supervised training - a set of factors is sampled from some distribution, and the related tensor $$D$$ is given as an initial condition to the actor network, which is then trained to output the correct factors. AlphaTensor generates a large dataset of such demonstrations and uses a mixed training strategy, alternating between training on supervised loss on the demonstrations and reinforcement learning loss on the target tensor $$T$$. This was found to substantially outperform either strategy separately. ([Implementation of synthetic demonstrations][code-synth-demos])
 
 
-## The Policy and Value Networks
+## Network Architecture and Training
 
 The AlphaTensor network consists of three components:
 1. A [torso][code-torso], which takes information about the current state and produces an embedding.
 2. A [policy head][code-policy], which takes the embedding produced by the torso and generates a distribution over candidate actions.
 3. A [value head][code-value], which takes the embedding produced by the torso and generates a distribution over candidate actions.
 
-Pseudocode for each of these is provided in the [Supplementary Information][alphatensor-supplementary] to the paper. Below I will provide a brief outline with links to my implementation.
+In the rest of this secion I'll give a brief overview of the architecture with links to my implementation. The network is quite complex (particularly the torso) and I won't attempt to cover all the details - to fully understand it I recommend both the paper and the pseudocode provided in the [Supplementary Information][alphatensor-supplementary].
 
 ![](/assets/images/network_architecture.png){: width="600"}
 
+
+### Training Process
+
+The network is trained on a dataset which initially consists of synthetic demonstrations. Training is done by teacher-forcing - loss is computed for each action in the ground-truth training sequence given the previous ground-truth actions. Note that loss os computed both for the policy head (based on the probability assigned to the next ground-truth action) and for the value head (comparing the output value distribution to the ground-truth rank of the current tensor state).
+
+Periodically (after a given number of epochs), a MCTS is performed, starting from $T$. This is the step in which we actually use the model to explore and look for a solution to the problem we are interested in. Note that MCTS uses both the policy and value heads in deciding which directions to explore. All of the played games are added to a buffer, and the game with the best reward is added to a separate buffer. Both of these buffers are merged with the training dataset and eventually training is performed on fixed proportions of synthetic demonstrations, played games, and "best" played games.
+
+
 ### Torso
 
-The torso is based on a modification of transformers. The three-dimensional input tensors are projected onto three two-dimensional grids of feature vectors. These grids are passed through a sequence of [attention-based blocks][code-attention] which use a modified form of [axial attention][axial-attn]. These produce an embedding vector which is passed to the policy and value heads.
+The torso converts the current state of $$S$$ (to be more precise, its past $$n$$ states), as well as any scalar inputs (such as the time index of the current action), to an embedding that feeds into the policy and value heads. It projects the $$4 \times 4 \times 4$$ tensor onto three $$4 \times 4$$ grids, one along each of its three directions. Following this, [attention-based blocks][code-attention] are used to propagate information between the three grids. A [block][code-torso-attention] has three stages - in each stage one of the three pairs of grids is concatenated and [axial attention][axial-attn] is applied. The output of the final block is flattened to an embedding vector which is the output of the torso.
 
+![](/assets/images/torso_architecture.png){: width="800"}
 
 ### Policy Head
 
@@ -147,6 +165,11 @@ The value head is a multilayer perceptron whose output is an estimate of the dis
 ![](/assets/images/value_head.png){: width="600"}
 
 
+### Training AlphaTensor
+
+Now that we have all the main parts, let's put them together!
+
+
 ...
 
 ## Exploration via Monte Carlo Tree Search
@@ -154,9 +177,6 @@ used in [AlphaZero][alphazero] and extended [here][muzero]
 ...
 
 
-## Training AlphaTensor
-
-Now that we have all the main parts, let's put them together!
 
 
 [alphatensor-blog]: https://www.deepmind.com/blog/discovering-novel-algorithms-with-alphatensor
@@ -168,10 +188,14 @@ Now that we have all the main parts, let's put them together!
 [axial-attn]: https://arxiv.org/abs/1912.12180
 [distributional-rl]: https://arxiv.org/abs/1710.10044
 
+
+[assembly-ai]: https://www.assemblyai.com/blog/deepminds-alphatensor-explained/
+
 [my-repo]: https://github.com/kurtosis/mat_mul
 [code-synth-demos]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/datasets.py#L20
 [code-terminal-reward]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/act.py#L59
 [code-torso]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L99
+[code-torso-attention]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L71
 [code-value]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L211
 [code-policy]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L283
 [code-attention]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L71

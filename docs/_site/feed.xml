@@ -1,26 +1,33 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.3.2">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2023-07-04T10:54:36-04:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Kurt Smith</title><subtitle>Writeups of my side projects.</subtitle><entry><title type="html">DeepMind’s AlphaTensor</title><link href="http://localhost:4000/alphatensor/2023/07/01/alphatensor.html" rel="alternate" type="text/html" title="DeepMind’s AlphaTensor" /><published>2023-07-01T14:23:37-04:00</published><updated>2023-07-01T14:23:37-04:00</updated><id>http://localhost:4000/alphatensor/2023/07/01/alphatensor</id><content type="html" xml:base="http://localhost:4000/alphatensor/2023/07/01/alphatensor.html"><![CDATA[<p>DeepMind’s AlphaTensor system (<a href="https://www.deepmind.com/blog/discovering-novel-algorithms-with-alphatensor">blog</a>, <a href="https://www.nature.com/articles/s41586-022-05172-4">paper</a>), introduced in October, 2022 uses a deep reinforcement learning to discover efficient algorithms for matrix multiplication. It has, perhaps understandably, not received the same level of attention as recent advances in generative AI. However, there are a few aspects of this work which I think make it a particularly interesting application of deep learning:</p>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.3.2">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2023-07-05T11:47:31-04:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Kurt Smith</title><subtitle>Writeups of my side projects.</subtitle><entry><title type="html">DeepMind’s AlphaTensor</title><link href="http://localhost:4000/alphatensor/2023/07/01/alphatensor.html" rel="alternate" type="text/html" title="DeepMind’s AlphaTensor" /><published>2023-07-01T14:23:37-04:00</published><updated>2023-07-01T14:23:37-04:00</updated><id>http://localhost:4000/alphatensor/2023/07/01/alphatensor</id><content type="html" xml:base="http://localhost:4000/alphatensor/2023/07/01/alphatensor.html"><![CDATA[<p>DeepMind’s AlphaTensor system (<a href="https://www.deepmind.com/blog/discovering-novel-algorithms-with-alphatensor">blog</a>, <a href="https://www.nature.com/articles/s41586-022-05172-4">paper</a>), introduced in October, 2022 uses deep reinforcement learning to discover efficient algorithms for matrix multiplication. It has, perhaps understandably, not received the same level of attention as recent advances in generative AI. However, there are a few aspects of this work which I think make it a particularly interesting application of deep learning:</p>
 <ul>
-  <li>The complexity of the problem comes from its underlying mathematical structure and is not related to extracting information from large empirical data sets as is common with text, image, omics and other areas.</li>
-  <li>This is a single player game which, at first glance, is very much a “find a needle in a haystack” sort of problem. Unlike complex two-player games, such as chess and go, it cannot benefit from self-play to bootstrap improvements</li>
-  <li>AlphaTensor involves multiple novel techniques, such as a transformer network to select actions from a high dimensional, discrete space and Monte Carlo tree search to solve the reinforcement learning problem.</li>
+  <li>The complexity of the problem comes from its underlying mathematical structure. The challenge is not extracting information from large empirical data sets (e.g. text, image, omics) but solving an NP-hard problem. Also, unlike two-player games, such as chess and go, it cannot rely on self-play to provide continuous feedback and bootstrap improvements.</li>
+  <li>AlphaTensor uses several techniques to tackle the problem, such as a transformer network to select actions from a high dimensional, discrete space and Monte Carlo tree search (MCTS) to solve the reinforcement learning problem.</li>
 </ul>
 
 <p>In this post I’ll break down the matrix multiplication problem and walk through <a href="https://github.com/kurtosis/mat_mul">my implementation</a> of AlphaTensor. (All figures below are from the AlphaTensor paper.)</p>
 
 <h1 id="addition-and-multiplication">Addition and Multiplication</h1>
 
-<p>The importance of the order of operations stems from the simple fact that multiplication is a more expensive operation than addition. To build some intuition, consider which of the following arithmetic calculations would take more effort to solve:<br />
+<p>The importance of the order of operations stems from the simple fact that multiplication is a more expensive operation than addition. To build some intuition, consider which of the following arithmetic calculations takes more effort for you to do:<br />
 \(15047 + 30821\)<br />
 or <br />
 \(15047 \times 30821\)</p>
 
-<p>Clearly the multiplication would be harder (you might even be able to do the addition in your head, but for the multiplication this would require a strong memory!).</p>
+<p>Clearly multiplication is more work (you might even be able to do the addition in your head, but for the multiplication this would require a strong memory!).</p>
 
 <p>Consider two integers of N digits each. The cost of adding these numbers is \(O(N)\) - we first add the digits in the ones place, then those in the tens place, etc. The cost of multiplying the numbers is \(O(N^2)\) - we must multiply the “ones” digit of the first number by every digit in the second number, then do the same for the “tens” digit, etc. More generally, if we denote the magnitude of an integer as \(M\) then the number of digits scales as \(log(M)\). Thus, addition is \(O(log(M))\) and multiplication is \(O(log(M)^2)\). The key point here is the quadratic relation between multiplication and addition - this holds whether the numbers are of different magnitudes, are expressed in bits rather than base 10, or are floating point rather than integers.</p>
 
-<p>Next, let’s consider is the number of operations required to resolve an arithmetic expression. Consider calculating the following:<br />
-\((15047 + 30821) \times (39012 + 82615)\)<br />
-Most of us would instinctively perform two additions followed by a single multiplication, rather than the more arduous task of four multiplications followed by three additions (or one addition, followed by two multiplications, followed by another addition). The key point is that for complex arithmetic calculations there are multiple paths to arrive at the answer, some of which are more efficient than others. While each operation has a cost, generally reducing the number of multiplications is most important to reducing the overall cost.</p>
+<p>Why does this observation matter? As it turns out, many calculations have multiple paths (i.e. sequences of scalar arithmetic operations) which produce the correct result. The number of paths increases with the size of the calculation and in general, paths with fewer multiplications are more efficient. As a simple example (courtesy of <a href="https://www.assemblyai.com/blog/deepminds-alphatensor-explained/">Assembly AI</a>) consider how we might compute the difference of two squares, \(a^2 - b^2\). Both of these algorithms perform three operations and return the correct result:</p>
+
+<p>\(c_1 = a \cdot a\)<br />
+\(c_2 = b \cdot b\)<br />
+return \(c_1 - c2\)</p>
+
+<p>\(d_1 = a + b\)<br />
+\(d_2 = a - b\)<br />
+return \(d_1 \cdot d_2\)</p>
+
+<p>However the second one is more efficient because it requires one multiplication rather than two. (You can try timing this on your laptop to confirm!)</p>
 
 <h1 id="matrix-multiplication">Matrix Multiplication</h1>
 
@@ -102,7 +109,7 @@ In Strassen’s algorithm for instance \(a_1b_4\) contributes to three intermedi
 
 <p>While it is NP-hard to decompose a given tensor \(T\) into factors, it is straightfoward to do the inverse: to construct a tensor \(D\) from a given set of factors \(\{({\bf u}^(r), {\bf v}^(r), {\bf w}^(r))\}^R_{r=1}\). This suggests a way to create synthetic demonstrations for supervised training - a set of factors is sampled from some distribution, and the related tensor \(D\) is given as an initial condition to the actor network, which is then trained to output the correct factors. AlphaTensor generates a large dataset of such demonstrations and uses a mixed training strategy, alternating between training on supervised loss on the demonstrations and reinforcement learning loss on the target tensor \(T\). This was found to substantially outperform either strategy separately. (<a href="https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/datasets.py#L20">Implementation of synthetic demonstrations</a>)</p>
 
-<h2 id="the-policy-and-value-networks">The Policy and Value Networks</h2>
+<h2 id="network-architecture-and-training">Network Architecture and Training</h2>
 
 <p>The AlphaTensor network consists of three components:</p>
 <ol>
@@ -111,13 +118,21 @@ In Strassen’s algorithm for instance \(a_1b_4\) contributes to three intermedi
   <li>A <a href="https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L211">value head</a>, which takes the embedding produced by the torso and generates a distribution over candidate actions.</li>
 </ol>
 
-<p>Pseudocode for each of these is provided in the <a href="https://static-content.springer.com/esm/art%3A10.1038%2Fs41586-022-05172-4/MediaObjects/41586_2022_5172_MOESM1_ESM.pdf">Supplementary Information</a> to the paper. Below I will provide a brief outline with links to my implementation.</p>
+<p>In the rest of this secion I’ll give a brief overview of the architecture with links to my implementation. The network is quite complex (particularly the torso) and I won’t attempt to cover all the details - to fully understand it I recommend both the paper and the pseudocode provided in the <a href="https://static-content.springer.com/esm/art%3A10.1038%2Fs41586-022-05172-4/MediaObjects/41586_2022_5172_MOESM1_ESM.pdf">Supplementary Information</a>.</p>
 
 <p><img src="/assets/images/network_architecture.png" alt="" width="600" /></p>
 
+<h3 id="training-process">Training Process</h3>
+
+<p>The network is trained on a dataset which initially consists of synthetic demonstrations. Training is done by teacher-forcing - loss is computed for each action in the ground-truth training sequence given the previous ground-truth actions. Note that loss os computed both for the policy head (based on the probability assigned to the next ground-truth action) and for the value head (comparing the output value distribution to the ground-truth rank of the current tensor state).</p>
+
+<p>Periodically (after a given number of epochs), a MCTS is performed, starting from $T$. This is the step in which we actually use the model to explore and look for a solution to the problem we are interested in. Note that MCTS uses both the policy and value heads in deciding which directions to explore. All of the played games are added to a buffer, and the game with the best reward is added to a separate buffer. Both of these buffers are merged with the training dataset and eventually training is performed on fixed proportions of synthetic demonstrations, played games, and “best” played games.</p>
+
 <h3 id="torso">Torso</h3>
 
-<p>The torso is based on a modification of transformers. The three-dimensional input tensors are projected onto three two-dimensional grids of feature vectors. These grids are passed through a sequence of <a href="https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L71">attention-based blocks</a> which use a modified form of <a href="https://arxiv.org/abs/1912.12180">axial attention</a>. These produce an embedding vector which is passed to the policy and value heads.</p>
+<p>The torso converts the current state of \(S\) (to be more precise, its past \(n\) states), as well as any scalar inputs (such as the time index of the current action), to an embedding that feeds into the policy and value heads. It projects the \(4 \times 4 \times 4\) tensor onto three \(4 \times 4\) grids, one along each of its three directions. Following this, <a href="https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L71">attention-based blocks</a> are used to propagate information between the three grids. A <a href="https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L71">block</a> has three stages - in each stage one of the three pairs of grids is concatenated and <a href="https://arxiv.org/abs/1912.12180">axial attention</a> is applied. The output of the final block is flattened to an embedding vector which is the output of the torso.</p>
+
+<p><img src="/assets/images/torso_architecture.png" alt="" width="800" /></p>
 
 <h3 id="policy-head">Policy Head</h3>
 
@@ -133,12 +148,12 @@ In Strassen’s algorithm for instance \(a_1b_4\) contributes to three intermedi
 
 <p><img src="/assets/images/value_head.png" alt="" width="600" /></p>
 
+<h3 id="training-alphatensor">Training AlphaTensor</h3>
+
+<p>Now that we have all the main parts, let’s put them together!</p>
+
 <p>…</p>
 
 <h2 id="exploration-via-monte-carlo-tree-search">Exploration via Monte Carlo Tree Search</h2>
 <p>used in <a href="https://www.science.org/doi/10.1126/science.aar6404">AlphaZero</a> and extended <a href="https://arxiv.org/abs/2104.06303">here</a>
-…</p>
-
-<h2 id="training-alphatensor">Training AlphaTensor</h2>
-
-<p>Now that we have all the main parts, let’s put them together!</p>]]></content><author><name></name></author><category term="alphatensor" /><summary type="html"><![CDATA[DeepMind’s AlphaTensor system (blog, paper), introduced in October, 2022 uses a deep reinforcement learning to discover efficient algorithms for matrix multiplication. It has, perhaps understandably, not received the same level of attention as recent advances in generative AI. However, there are a few aspects of this work which I think make it a particularly interesting application of deep learning: The complexity of the problem comes from its underlying mathematical structure and is not related to extracting information from large empirical data sets as is common with text, image, omics and other areas. This is a single player game which, at first glance, is very much a “find a needle in a haystack” sort of problem. Unlike complex two-player games, such as chess and go, it cannot benefit from self-play to bootstrap improvements AlphaTensor involves multiple novel techniques, such as a transformer network to select actions from a high dimensional, discrete space and Monte Carlo tree search to solve the reinforcement learning problem.]]></summary></entry></feed>
+…</p>]]></content><author><name></name></author><category term="alphatensor" /><summary type="html"><![CDATA[DeepMind’s AlphaTensor system (blog, paper), introduced in October, 2022 uses deep reinforcement learning to discover efficient algorithms for matrix multiplication. It has, perhaps understandably, not received the same level of attention as recent advances in generative AI. However, there are a few aspects of this work which I think make it a particularly interesting application of deep learning: The complexity of the problem comes from its underlying mathematical structure. The challenge is not extracting information from large empirical data sets (e.g. text, image, omics) but solving an NP-hard problem. Also, unlike two-player games, such as chess and go, it cannot rely on self-play to provide continuous feedback and bootstrap improvements. AlphaTensor uses several techniques to tackle the problem, such as a transformer network to select actions from a high dimensional, discrete space and Monte Carlo tree search (MCTS) to solve the reinforcement learning problem.]]></summary></entry></feed>
