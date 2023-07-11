@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.3.2">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2023-07-05T11:47:31-04:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Kurt Smith</title><subtitle>Writeups of my side projects.</subtitle><entry><title type="html">DeepMind’s AlphaTensor</title><link href="http://localhost:4000/alphatensor/2023/07/01/alphatensor.html" rel="alternate" type="text/html" title="DeepMind’s AlphaTensor" /><published>2023-07-01T14:23:37-04:00</published><updated>2023-07-01T14:23:37-04:00</updated><id>http://localhost:4000/alphatensor/2023/07/01/alphatensor</id><content type="html" xml:base="http://localhost:4000/alphatensor/2023/07/01/alphatensor.html"><![CDATA[<p>DeepMind’s AlphaTensor system (<a href="https://www.deepmind.com/blog/discovering-novel-algorithms-with-alphatensor">blog</a>, <a href="https://www.nature.com/articles/s41586-022-05172-4">paper</a>), introduced in October, 2022 uses deep reinforcement learning to discover efficient algorithms for matrix multiplication. It has, perhaps understandably, not received the same level of attention as recent advances in generative AI. However, there are a few aspects of this work which I think make it a particularly interesting application of deep learning:</p>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.3.2">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2023-07-10T01:41:33-04:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Kurt Smith</title><subtitle>Writeups of my side projects.</subtitle><entry><title type="html">Breaking Down DeepMind’s AlphaTensor</title><link href="http://localhost:4000/alphatensor/2023/07/01/alphatensor.html" rel="alternate" type="text/html" title="Breaking Down DeepMind’s AlphaTensor" /><published>2023-07-01T14:23:37-04:00</published><updated>2023-07-01T14:23:37-04:00</updated><id>http://localhost:4000/alphatensor/2023/07/01/alphatensor</id><content type="html" xml:base="http://localhost:4000/alphatensor/2023/07/01/alphatensor.html"><![CDATA[<p>DeepMind’s AlphaTensor system (<a href="https://www.deepmind.com/blog/discovering-novel-algorithms-with-alphatensor">blog</a>, <a href="https://www.nature.com/articles/s41586-022-05172-4">paper</a>), introduced in October, 2022 uses deep reinforcement learning to discover efficient algorithms for matrix multiplication. It has, perhaps understandably, not received the same level of attention as recent advances in generative AI. However, there are a few aspects of this work which I think make it a particularly interesting application of deep learning:</p>
 <ul>
   <li>The complexity of the problem comes from its underlying mathematical structure. The challenge is not extracting information from large empirical data sets (e.g. text, image, omics) but solving an NP-hard problem. Also, unlike two-player games, such as chess and go, it cannot rely on self-play to provide continuous feedback and bootstrap improvements.</li>
   <li>AlphaTensor uses several techniques to tackle the problem, such as a transformer network to select actions from a high dimensional, discrete space and Monte Carlo tree search (MCTS) to solve the reinforcement learning problem.</li>
@@ -43,6 +43,8 @@ return \(d_1 \cdot d_2\)</p>
 
 <p>Each element of the product requires two multiplications, resulting in eight multiplications overall. In 1969, <a href="https://eudml.org/doc/131927">Strassen</a> showed that this can be computed using a two-level method which requires only seven multiplications.</p>
 
+\[c_k = \sum_{i,j}{t_{ijk}a_ib_j}\]
+
 <p><img src="/assets/images/strassen_algo.png" alt="" width="200" /></p>
 
 <p>In general, the standard way of multipling matrices of sizes \((n \times m)\) and \((m \times p)\), requires \((n \times p) \times m\) scalar multiplications. It turns out that for most cases which have been examined, it is possible to perform the operation with substantially fewer scalar multiplications. For example, the AlphaTensor paper reported that the case \((n=4, m=5, p=5)\) can be computed with 76 multiplications rather than 100.</p>
@@ -53,32 +55,32 @@ return \(d_1 \cdot d_2\)</p>
 
 <p>The next step is to frame this search for efficient solutions with few multiplications (known as low-rank decompositions) as a problem that is amenable to machine learning. Looking at Strassen’s algorithm, this may seem challening at first glance, as there are an enormous number of discrete permutations to choose from and it is not obvious what sort of gradient we might perform gradient descent over.</p>
 
-<p>To start, consider describing the matrix multiplication \(C=AB\) by a three-dimensional tensor \(T\) where the element \(T_{i,j,k}\) denotes the contribution of \(a_ib_j\) to \(c_k\). (Note that the dimensions of \(T\) are \((n \times m) \times (m \times p) \times (n \times p)\).)</p>
+<p>To start, consider describing the matrix multiplication \(C=AB\) by a three-dimensional tensor \(\mathcal{T}\) where the element \(t_{i,j,k}\) denotes the contribution of \(a_ib_j\) to \(c_k\). (Note that the dimensions of \(\mathcal{T}\) are \((n \times m) \times (m \times p) \times (n \times p)\).)</p>
 
 <p><img src="/assets/images/tensor_3d.png" alt="" width="300" /></p>
 
 <p>For example, in the \((2,2,2)\) case, \(c_1 = a_1b_1 + a_2b_3\) is denoted by:<br />
-\(T_{1, 1, 1} = 1\)<br />
-\(T_{2, 3, 1} = 1\)<br />
-\(T_{i, j, 1} = 0 \space \forall \space \text{other} \space (i, j)\)<br />
+\(t_{1, 1, 1} = 1\)<br />
+\(t_{2, 3, 1} = 1\)<br />
+\(t_{i, j, 1} = 0 \space \forall \space \text{other} \space (i, j)\)<br />
 and similarly for \(c_2\), \(c_3\), and \(c_4\).</p>
 
-<p>Consider a process in which we first set a tensor \(S\) equal to the zero tensor and then sequentially modify it by choosing three vectors \({\bf u}\), \({\bf v}\), and \({\bf w}\), each of length 4, and performing the following update:<br />
-\(S_{i, j, k} \leftarrow S_{i, j, k} + u_iv_jw_k\)</p>
+<p>Consider a process in which we first set a tensor \(\mathcal{S}\) equal to the zero tensor and then sequentially modify it by choosing three vectors \({\bf u}\), \({\bf v}\), and \({\bf w}\), each of length 4, and performing the following update:<br />
+\(s_{i, j, k} \leftarrow s_{i, j, k} + u_iv_jw_k\)</p>
 
-<p>For example, applying the following vectors to \(S=0\):<br />
+<p>For example, applying the following vectors to \(\mathcal{S}=0\):<br />
 \({\bf u =  v = w} = (1, 0, 0, 1)\)<br />
 results in:<br />
-\(S_{1, 1, 1} = 1\)<br />
-\(S_{1, 1, 4} = 1\)<br />
-\(S_{1, 4, 1} = 1\)<br />
-\(S_{1, 4, 4} = 1\)<br />
-\(S_{4, 1, 1} = 1\)<br />
-\(S_{4, 1, 4} = 1\)<br />
-\(S_{4, 4, 1} = 1\)<br />
-\(S_{4, 4, 4} = 1\)</p>
+\(s_{1, 1, 1} = 1\)<br />
+\(s_{1, 1, 4} = 1\)<br />
+\(s_{1, 4, 1} = 1\)<br />
+\(s_{1, 4, 4} = 1\)<br />
+\(s_{4, 1, 1} = 1\)<br />
+\(s_{4, 1, 4} = 1\)<br />
+\(s_{4, 4, 1} = 1\)<br />
+\(s_{4, 4, 4} = 1\)</p>
 
-<p>Finding a more efficient matrix multiplication algorithm is equivalent to reducing the number of such updates needed to go from \(S=0\) to \(S=T\).
+<p>Finding a more efficient matrix multiplication algorithm is equivalent to reducing the number of such updates needed to go from \(\mathcal{S}=0\) to \(\mathcal{S}=\mathcal{T}\).
 Each update involves a series of arithmetic operations with one scalar multiplication:
 \(u\) specifies a set of elements in \(A\) to be linearly combined.
 \(v\) specifies a set of elements in \(B\) to be linearly combined.
@@ -89,13 +91,13 @@ The product of these two combinations contributes to elements of \(C\) as specif
 
 <h1 id="describing-this-as-a-game">Describing this as a game</h1>
 
-<p>It should now be clearer how this can be cast as a reinforcement learning problem. It will be more convenient to set the initial state as \(S=T\) and subtract, rather than add, the \({\bf u}\), \({\bf v}\), and \({\bf w}\) contributions at each step. Our goal is to find the smallest number steps necessary to arrive at \(S=0\).</p>
+<p>It should now be clearer how this can be cast as a reinforcement learning problem. It will be more convenient to set the initial state as \(\mathcal{S}=\mathcal{T}\) and subtract, rather than add, the \({\bf u}\), \({\bf v}\), and \({\bf w}\) contributions at each step. Our goal is to find the smallest number steps necessary to arrive at \(\mathcal{S}=0\).</p>
 
 <p>At first glance it might seem that there is little coherent structure to efficient algorithms and given the discrete nature of the steps it will be hard to do better than trial-and-error.
 In Strassen’s algorithm for instance \(a_1b_4\) contributes to three intermediate variables (\(m_1\), \(m_3\), and \(m_5\)) despite not contributing to any of the elements of \(C\).</p>
 
 <ol>
-  <li>Build a policy model to choose an action \(\{ {\bf u,  v,  w}\}\) given a state \(S\).</li>
+  <li>Build a policy model to choose an action \(\{ {\bf u,  v,  w}\}\) given a state \(\mathcal{S}\).</li>
   <li>Define a sufficiently dense reward function to provide feedback to the policy model.</li>
   <li>Develop a RL/exploration algorithm to efficiently search for low-rank decompositions.</li>
   <li>Supplement the RL problem with a supervised learning problem on known decompositions.</li>
@@ -103,11 +105,11 @@ In Strassen’s algorithm for instance \(a_1b_4\) contributes to three intermedi
 
 <h2 id="reward-function">Reward function</h2>
 
-<p>Since the goal is to minimize the number of steps taken to reach \(S=0\), AlphaTensor provides a reward of \(-1\) for each step taken. In practice, games are terminated after a finite number (\(R_{limit}\)) of steps. If we still have a non-zero tensor \(S\) at this point, an additional reward of \(-\gamma(S)\) is given, equal to “an upper bound on the rank of the terminal tensor.” In simpler terms, \(\gamma(S)\) is the number of non-zero entries remaining in \(S\) since we know that each of these could be eliminated by a single update. Note that this terminal reward plays an important role in creating a dense reward function. Without it, the agend would only recieve useful feedback when it reaches the zero tensor within \(R_{limit}\) steps - a sparse reward on its own. (<a href="https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/act.py#L59">Implementation of terminal reward</a>)</p>
+<p>Since the goal is to minimize the number of steps taken to reach \(\mathcal{S}=0\), AlphaTensor provides a reward of \(-1\) for each step taken. In practice, games are terminated after a finite number (\(R_{limit}\)) of steps. If we still have a non-zero tensor \(\mathcal{S}\) at this point, an additional reward of \(-\gamma(S)\) is given, equal to “an upper bound on the rank of the terminal tensor” (<a href="https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/act.py#L59">code</a>). In simpler terms, \(\gamma(S)\) is the number of non-zero entries remaining in \(\mathcal{S}\) since we know that each of these could be eliminated by a single update. Note that this terminal reward plays an important role in creating a dense reward function. Without it, the agend would only recieve useful feedback when it reaches the zero tensor within \(R_{limit}\) steps - a sparse reward on its own.</p>
 
 <h2 id="supervised-learning">Supervised learning</h2>
 
-<p>While it is NP-hard to decompose a given tensor \(T\) into factors, it is straightfoward to do the inverse: to construct a tensor \(D\) from a given set of factors \(\{({\bf u}^(r), {\bf v}^(r), {\bf w}^(r))\}^R_{r=1}\). This suggests a way to create synthetic demonstrations for supervised training - a set of factors is sampled from some distribution, and the related tensor \(D\) is given as an initial condition to the actor network, which is then trained to output the correct factors. AlphaTensor generates a large dataset of such demonstrations and uses a mixed training strategy, alternating between training on supervised loss on the demonstrations and reinforcement learning loss on the target tensor \(T\). This was found to substantially outperform either strategy separately. (<a href="https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/datasets.py#L20">Implementation of synthetic demonstrations</a>)</p>
+<p>While it is NP-hard to decompose a given tensor \(\mathcal{T}\) into factors, it is straightfoward to do the inverse: to construct a tensor \(D\) from a given set of factors \(\{({\bf u}^(r), {\bf v}^(r), {\bf w}^(r))\}^R_{r=1}\). This suggests a way to create synthetic demonstrations for supervised training - a set of factors is sampled from some distribution, and the related tensor \(D\) is given as an initial condition to the actor network, which is then trained to output the correct factors (<a href="https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/datasets.py#L20">code</a>). AlphaTensor generates a large dataset of such demonstrations and uses a mixed training strategy, alternating between training on supervised loss on the demonstrations and reinforcement learning loss on the target tensor \(\mathcal{T}\). This was found to substantially outperform either strategy separately.</p>
 
 <h2 id="network-architecture-and-training">Network Architecture and Training</h2>
 
@@ -126,11 +128,11 @@ In Strassen’s algorithm for instance \(a_1b_4\) contributes to three intermedi
 
 <p>The network is trained on a dataset which initially consists of synthetic demonstrations. Training is done by teacher-forcing - loss is computed for each action in the ground-truth training sequence given the previous ground-truth actions. Note that loss os computed both for the policy head (based on the probability assigned to the next ground-truth action) and for the value head (comparing the output value distribution to the ground-truth rank of the current tensor state).</p>
 
-<p>Periodically (after a given number of epochs), a MCTS is performed, starting from $T$. This is the step in which we actually use the model to explore and look for a solution to the problem we are interested in. Note that MCTS uses both the policy and value heads in deciding which directions to explore. All of the played games are added to a buffer, and the game with the best reward is added to a separate buffer. Both of these buffers are merged with the training dataset and eventually training is performed on fixed proportions of synthetic demonstrations, played games, and “best” played games.</p>
+<p>Periodically (after a given number of epochs), a MCTS is performed, starting from \(\mathcal{T}\). This is the step in which we actually use the model to explore and look for a solution to the problem we are interested in. Note that MCTS uses both the policy and value heads in deciding which directions to explore. All of the played games are added to a buffer, and the game with the best reward is added to a separate buffer. Both of these buffers are merged with the training dataset and eventually training is performed on fixed proportions of synthetic demonstrations, played games, and “best” played games.</p>
 
 <h3 id="torso">Torso</h3>
 
-<p>The torso converts the current state of \(S\) (to be more precise, its past \(n\) states), as well as any scalar inputs (such as the time index of the current action), to an embedding that feeds into the policy and value heads. It projects the \(4 \times 4 \times 4\) tensor onto three \(4 \times 4\) grids, one along each of its three directions. Following this, <a href="https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L71">attention-based blocks</a> are used to propagate information between the three grids. A <a href="https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L71">block</a> has three stages - in each stage one of the three pairs of grids is concatenated and <a href="https://arxiv.org/abs/1912.12180">axial attention</a> is applied. The output of the final block is flattened to an embedding vector which is the output of the torso.</p>
+<p>The torso converts the current state of \(\mathcal{S}\) (to be more precise, its past \(n\) states), as well as any scalar inputs (such as the time index of the current action), to an embedding that feeds into the policy and value heads. It projects the \(4 \times 4 \times 4\) tensor onto three \(4 \times 4\) grids, one along each of its three directions. Following this, <a href="https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L71">attention-based blocks</a> are used to propagate information between the three grids. A <a href="https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L71">block</a> has three stages - in each stage one of the three pairs of grids is concatenated and <a href="https://arxiv.org/abs/1912.12180">axial attention</a> is applied. The output of the final block is flattened to an embedding vector which is the output of the torso.</p>
 
 <p><img src="/assets/images/torso_architecture.png" alt="" width="800" /></p>
 
@@ -148,12 +150,44 @@ In Strassen’s algorithm for instance \(a_1b_4\) contributes to three intermedi
 
 <p><img src="/assets/images/value_head.png" alt="" width="600" /></p>
 
-<h3 id="training-alphatensor">Training AlphaTensor</h3>
+<h2 id="monte-carlo-tree-search">Monte Carlo Tree Search</h2>
+<p>So far we’ve described our network architecture and a method of training it on synthetic demonstrations. But how do we actually play TensorGame and search for a low-rank decomposition of \(\mathcal{T}\)? AlphaTensor uses Monte Carlo Tree Search, as described in the <a href="https://www.science.org/doi/10.1126/science.aar6404">AlphaZero</a> and <a href="https://arxiv.org/abs/2104.06303">Sampled MuZero</a> papers. MCTS uses the output of the network’s policy and value heads, along with an upper-confidence bound decision rule to explore the game tree. The implementation of MCTS invovles a fairly deep call stack, with several nested loops and can be difficult to follow from the code alone. Let’s build some intuition by illustrating this graphically.</p>
 
-<p>Now that we have all the main parts, let’s put them together!</p>
+<p>To start - the purpose of the MCTS step is to generate a set of games (or trajectories) which will be added to the training dataset (as mentioned above). Also, of course, this is the step in which we are hoping to discover a low-rank decomposition! Naively, we might consider producing a trajectory by sequentially sampling actions from the policy head and updating \(\mathcal{S}\). Perhaps we could generate several trajectories and add the best ones to the training buffer? Unsurprisingly, this simple approach is inefficient and MCTS is a way to do better. It works by building a search tree (in which the nodes are states and the edges are actions) and using a decision rule to decide which branches to explore further, before finally choosing which action to take. Let’s break it down:</p>
 
-<p>…</p>
+<ol>
+  <li>Initialize a tree with our initial state \(A\) as the root. We next wish to extend the tree which we will do by sampling \(n_{samples} = 2\) actions from our network, given input state \(A\). These actions produce the child states \(B\) and \(C\).<br />
+<img src="/assets/images/a_c_graph.png" alt="" height="155" /></li>
+  <li>We want to continue extending the tree, so we must choose which leaf node (\(B\) or \(C\)) to extend. We do this by starting at \(A\) and using a decision rule (which I will define below) to traverse the tree. In this example, the rule selects the branch \(A \rightarrow B\). We next samples \(n_{samples}\) actions at state \(B\), extending the tree to \(D\) and \(E\).<br />
+<img src="/assets/images/a_e_graph.png" alt="" height="200" /></li>
+  <li>We repeat the process in (2), and this time our decision rule selects \(A \rightarrow C\) (more on why below!) and we now extend the tree from \(C\).<br />
+<img src="/assets/images/a_g_graph.png" alt="" height="200" /></li>
+  <li>In the next iteration, we apply the decision rule twice to reach a leaf node, selecting \(A \rightarrow C\) and then \(C \rightarrow F\), before extending the tree from \(F\).<br />
+<img src="/assets/images/a_i_graph.png" alt="" height="200" /></li>
+  <li>Continue until we have extended the tree \(n_{MC}=4\) times. At this point, we are done exploration and will choose the action to take from \(A\). We do this using the decision rule again. In this illustration we select \(A \rightarrow B\) as the first action in our trajectory.<br />
+<img src="/assets/images/a_c_final_action.png" alt="" height="200" /></li>
+  <li>We now repeat the same process, starting from \(C\) to choose the second action in our trajectory. Rather than building a new tree from scratch, we start with the subtree below \(C\) and extend it until it has \(n_{MC}\) branch points.<br />
+<img src="/assets/images/c_i_graph.png" alt="" height="150" /></li>
+</ol>
 
-<h2 id="exploration-via-monte-carlo-tree-search">Exploration via Monte Carlo Tree Search</h2>
-<p>used in <a href="https://www.science.org/doi/10.1126/science.aar6404">AlphaZero</a> and extended <a href="https://arxiv.org/abs/2104.06303">here</a>
-…</p>]]></content><author><name></name></author><category term="alphatensor" /><summary type="html"><![CDATA[DeepMind’s AlphaTensor system (blog, paper), introduced in October, 2022 uses deep reinforcement learning to discover efficient algorithms for matrix multiplication. It has, perhaps understandably, not received the same level of attention as recent advances in generative AI. However, there are a few aspects of this work which I think make it a particularly interesting application of deep learning: The complexity of the problem comes from its underlying mathematical structure. The challenge is not extracting information from large empirical data sets (e.g. text, image, omics) but solving an NP-hard problem. Also, unlike two-player games, such as chess and go, it cannot rely on self-play to provide continuous feedback and bootstrap improvements. AlphaTensor uses several techniques to tackle the problem, such as a transformer network to select actions from a high dimensional, discrete space and Monte Carlo tree search (MCTS) to solve the reinforcement learning problem.]]></summary></entry></feed>
+<p>The decision rule used above selects the action \(a\) which maximizes the following quantity: \(Q(s,a) + c(s) \cdot \hat{\pi}(s,a) \frac{ \sqrt{\sum_b{N(s,b)}}}{1 + N(s,a)}\)<br />
+where</p>
+<ul>
+  <li>\(Q(s,a)\) - action value, generated by network</li>
+  <li>\(N(s,a)\) - number of visits to the state-action pair \((s,a)\)</li>
+  <li>\(\hat{\pi}(s,a)\) - empirical policy, the fraction of sampled actions from \(s\) that were \(a\).</li>
+  <li>\(c(s)\) an exploration factor
+This is the upper-confidence tree bound - it favors actions which have a high value but have not been expored frequently and have a high empirical policy probability.</li>
+</ul>
+
+<p>Each time the tree is extended we do a backward pass (<a href="https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/act.py#L223">code</a>) in which \(N(s,a)\) and \(Q(s,a)\) are updated for all nodes along the simulated trajectory.</p>
+
+<p>DeepMind’s MCTS procedure uses \(n_{samples}=32\) and \(n_{mc}=800\), producing trees with up to 25,600 nodes.</p>
+
+<h3 id="policy-improvement">Policy Improvement</h3>
+<p>Following the above steps, we can generate a trajectory via MCTS. We can represent this trajectory as a sequence of actions, as well as the policy probability and value of each action:<br />
+\(\{(a_i, \hat{\pi}(a_i), Q(a_i)\}\)<br />
+We will use \(\hat{\pi}(a_i)\) and \(Q(a_i)\) to train the policy and value heads respectively. A simple approach is to use \(\hat{\pi}(a) = N(s,a)/N(s)\) as the policy, in other words the fraction of trajectories from state \(s\) which visit action \(a\). Instead, AlphaTensor uses a temperature smoothing scheme to compute an improved policy (<a href="https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/act.py#L308">code</a>):<br />
+\(\mathcal{I}\hat{\pi}(s,a) = [N(s,a)]^{1/\tau(s)} / \sum_b{[N(s,b)]^{1/\tau(s)}}\)<br />
+where<br />
+\(\tau(s)=\text{log }N(s)/\text{log }\bar{N}\) if \(N(s)&gt;\bar{N}\), else \(1\).</p>]]></content><author><name></name></author><category term="alphatensor" /><summary type="html"><![CDATA[DeepMind’s AlphaTensor system (blog, paper), introduced in October, 2022 uses deep reinforcement learning to discover efficient algorithms for matrix multiplication. It has, perhaps understandably, not received the same level of attention as recent advances in generative AI. However, there are a few aspects of this work which I think make it a particularly interesting application of deep learning: The complexity of the problem comes from its underlying mathematical structure. The challenge is not extracting information from large empirical data sets (e.g. text, image, omics) but solving an NP-hard problem. Also, unlike two-player games, such as chess and go, it cannot rely on self-play to provide continuous feedback and bootstrap improvements. AlphaTensor uses several techniques to tackle the problem, such as a transformer network to select actions from a high dimensional, discrete space and Monte Carlo tree search (MCTS) to solve the reinforcement learning problem.]]></summary></entry></feed>
