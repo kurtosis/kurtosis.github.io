@@ -13,19 +13,22 @@ DeepMind's AlphaTensor system ([blog][alphatensor-blog], [paper][alphatensor-nat
 In this post I'll break down the matrix multiplication problem and walk through [my implementation][my-repo] of AlphaTensor. (All figures below are from the AlphaTensor paper.)
 
 
-# Addition and Multiplication
+# Doing Arithmetic Efficiently
 
-The importance of the order of operations stems from the simple fact that multiplication is a more expensive operation than addition. To build some intuition, consider which of the following arithmetic calculations takes more effort for you to do:\
-$$15047 + 30821$$\
-or \
-$$15047 \times 30821$$
+It may seem surprising that the standard way of doing matrix multiplication is not optimal, but this stems from two facts:
+1. Multiplication is a more expensive operation than addition.
+2. For large arithmetic calculations, there are many sequences of operations which produce the correct result.
 
-Clearly multiplication is more work (you might even be able to do the addition in your head, but for the multiplication this would require a strong memory!).
+To illustrate (1), consider which of the following would take you more effort to calculate:
+<center> $$15047 + 30821$$ </center>
+or
+<center>  $$15047 \times 30821$$ </center>
+At a glance it should be clear that multiplication is more work.
+<!-- (you might even be able to do the addition in your head, but for the multiplication this would require a strong memory!). -->
+More precisely, consider two integers each of $$n$$ digits (or bits). Using standard "pencil-and-paper" methods, the time complexity of adding them is $$O(n)$$ - we first add the digits in the ones place and carry, then those in the tens place, etc. The time complexity of multiplying them is $$O(n^2)$$ - we multiply the "ones" digit of the first number by every digit in the second number, then do the same for the "tens" digit, etc. If we denote the value of an integer as $$N$$ then the number of digits scales as $$log(N)$$. Thus, addition is $$O(log(N)$$ and multiplication is $$O((log(N)^2)$$. The general point is that the complexity of standard multiplication scales as the square of the complexity of addition. (In truth, faster [multiplication algorithms][arithmetic-complexity] exist which are $$O(n \space log(n))$$, still slower than addition.)
+<!-- This holds whether the numbers are of different magnitudes, are expressed in bits rather than base 10, or are floating point rather than integers. -->
 
-Consider two integers of N digits each. The cost of adding these numbers is $$O(N)$$ - we first add the digits in the ones place, then those in the tens place, etc. The cost of multiplying the numbers is $$O(N^2)$$ - we must multiply the "ones" digit of the first number by every digit in the second number, then do the same for the "tens" digit, etc. More generally, if we denote the magnitude of an integer as $$M$$ then the number of digits scales as $$log(M)$$. Thus, addition is $$O(log(M))$$ and multiplication is $$O(log(M)^2)$$. The key point here is the quadratic relation between multiplication and addition - this holds whether the numbers are of different magnitudes, are expressed in bits rather than base 10, or are floating point rather than integers.
-
-
-Why does this observation matter? As it turns out, many calculations have multiple paths (i.e. sequences of scalar arithmetic operations) which produce the correct result. The number of paths increases with the size of the calculation and in general, paths with fewer multiplications are more efficient. As a simple example (courtesy of [Assembly AI][assembly-ai]) consider how we might compute the difference of two squares, $$a^2 - b^2$$. Both of these algorithms perform three operations and return the correct result:
+To illustrate (2), consider the example (courtesy of [Assembly AI][assembly-ai]) of computing the difference of two squares, $$a^2 - b^2$$. Both of these algorithms return the correct result:
 
 $$c_1 = a \cdot a$$\
 $$c_2 = b \cdot b$$\
@@ -35,12 +38,11 @@ $$d_1 = a + b$$\
 $$d_2 = a - b$$\
 return $$d_1 \cdot d_2$$
 
+While they each involve three operations, the latter only requires one multiplication and is thus faster. For matrix multiplication, there is a combinatorially large number of such "paths" to consider.
 
-However the second one is more efficient because it requires one multiplication rather than two. (You can try timing this on your laptop to confirm!)
+## Matrix Multiplication
 
-# Matrix Multiplication
-
-Consider matrix multiplication $$C = AB$$ where $$A$$ and $$B$$ are $$2 \times 2$$ matrices.
+Consider the matrix multiplication $$C = AB$$ where $$A$$ and $$B$$ are $$2 \times 2$$ matrices.
 
 <!-- ![](/assets/images/two_by_two.png){: width="300"} -->
 
@@ -53,69 +55,54 @@ $$c_1 = a_1b_1 + a_2b_3 \text{, etc.}$$
 Each element of the product requires two multiplications, resulting in eight multiplications overall. In 1969, [Strassen][strassen] showed that this can be computed using a two-level method which requires only seven multiplications.
 
 
-$$c_k = \sum_{i,j}{t_{ijk}a_ib_j} $$
-
 ![](/assets/images/strassen_algo.png){: width="200"}
 
+That's a surprising result! However it seems difficult to discern any structure to it and it might appear that finding such efficient algorithms for larger matrices is fundamentally a matter of trial-and-error. AlphaTensor's approach is rooted in two observations which allow us to reframe this challenge as a problem of efficiently searching a [game tree][game-tree].
+<!-- In general, the standard way of multipling matrices of sizes $$(n \times m)$$ and $$(m \times p)$$, requires $$(n \times p) \times m$$ scalar multiplications. It turns out that for most cases which have been examined, it is possible to perform the operation with substantially fewer scalar multiplications. For example, the AlphaTensor paper reported that the case $$(n=4, m=5, p=5)$$ can be computed with 76 multiplications rather than 100. -->
 
-In general, the standard way of multipling matrices of sizes $$(n \times m)$$ and $$(m \times p)$$, requires $$(n \times p) \times m$$ scalar multiplications. It turns out that for most cases which have been examined, it is possible to perform the operation with substantially fewer scalar multiplications. For example, the AlphaTensor paper reported that the case $$(n=4, m=5, p=5)$$ can be computed with 76 multiplications rather than 100.
+### Matrix Multiplication can be Expressed as a Tensor
 
-![](/assets/images/best_ranks.png){: width="400"}
+We can describe the multiplication $$C=AB$$ by a three-dimensional tensor $$\mathcal{T}$$ where the $$t_{ijk}$$ element denotes the contribution of $$a_ib_j$$ to $$c_k$$.
+<!-- (Note that the dimensions of $$\mathcal{T}$$ are $$(n \times m) \times (m \times p) \times (n \times p)$$.) -->
+$$c_k = \sum_{i,j}{t_{ijk}a_ib_j} $$
 
-# Framing the tensor product as a set of discrete moves
-
-The next step is to frame this search for efficient solutions with few multiplications (known as low-rank decompositions) as a problem that is amenable to machine learning. Looking at Strassen's algorithm, this may seem challening at first glance, as there are an enormous number of discrete permutations to choose from and it is not obvious what sort of gradient we might perform gradient descent over.
-
-To start, consider describing the matrix multiplication $$C=AB$$ by a three-dimensional tensor $$\mathcal{T}$$ where the element $$t_{i,j,k}$$ denotes the contribution of $$a_ib_j$$ to $$c_k$$. (Note that the dimensions of $$\mathcal{T}$$ are $$(n \times m) \times (m \times p) \times (n \times p)$$.)
-
+The elements of $$\mathcal{T}$$ are all in $$\{0, 1\}$$ and we can visualize it by shading each of the non-zero elements:\
 ![](/assets/images/tensor_3d.png){: width="300"}
 
-For example, in the $$(2,2,2)$$ case, $$c_1 = a_1b_1 + a_2b_3$$ is denoted by:\
-$$t_{1, 1, 1} = 1$$\
-$$t_{2, 3, 1} = 1$$\
-$$t_{i, j, 1} = 0 \space \forall \space \text{other} \space (i, j)$$\
+
+Note that $$c_1 = a_1b_1 + a_2b_3$$ is denoted by:\
+$$t_{111} = 1$$\
+$$t_{231} = 1$$\
+$$t_{ij1} = 0 \space \forall \space \text{other} \space (i, j)$$\
 and similarly for $$c_2$$, $$c_3$$, and $$c_4$$.
 
 
-Consider a process in which we first set a tensor $$\mathcal{S}$$ equal to the zero tensor and then sequentially modify it by choosing three vectors $${\bf u}$$, $${\bf v}$$, and $${\bf w}$$, each of length 4, and performing the following update:\
-$$s_{i, j, k} \leftarrow s_{i, j, k} + u_iv_jw_k$$
 
+### Matrix Multiplication Algorithms are Tensor Decompositions
 
-For example, applying the following vectors to $$\mathcal{S}=0$$:\
-$${\bf u =  v = w} = (1, 0, 0, 1)$$\
-results in:\
-$$s_{1, 1, 1} = 1$$\
-$$s_{1, 1, 4} = 1$$\
-$$s_{1, 4, 1} = 1$$\
-$$s_{1, 4, 4} = 1$$\
-$$s_{4, 1, 1} = 1$$\
-$$s_{4, 1, 4} = 1$$\
-$$s_{4, 4, 1} = 1$$\
-$$s_{4, 4, 4} = 1$$
+Note that Strassen's algorithm can be described as repeatedly performing "steps", each consisting of four operations:
+1. Compute $$u$$, a linear combination of elements of $$A$$. (highlighted in green above)
+2. Compute $$v$$, a linear combination of elements of $$B$$. (highlighted in purple above)
+3. Compute the product $$m=uv$$.
+4. Add $$m$$ (multiplied by a vector $${\bf w}$$) to the elements of $$C$$. (highlighted in yellow above)
 
-Finding a more efficient matrix multiplication algorithm is equivalent to reducing the number of such updates needed to go from $$\mathcal{S}=0$$ to $$\mathcal{S}=\mathcal{T}$$.
-Each update involves a series of arithmetic operations with one scalar multiplication:
-$$u$$ specifies a set of elements in $$A$$ to be linearly combined.
-$$v$$ specifies a set of elements in $$B$$ to be linearly combined.
-The product of these two combinations contributes to elements of $$C$$ as specified by $$w$$.
+Each step involves one scalar multiplication and Strassen's algorithm requires seven steps. This is a [tensor decomposition][tensor-decomp] of $$\mathcal{T}$$. It can be expressed more compactly by stacking the seven steps into three matrices $$U$$, $$V$$, and $$W$$:\
+![](/assets/images/uvw.png){: width="300"}\
+Each column represents one step in the algorithm, defined by the column vectors $${\bf u}$$, $${\bf v}$$, $${\bf w}$$. An efficient algorithm can equivalently be thought of as a low-rank decomposition of $$\mathcal{T}$$ - "rank" here refers to the number of columns in $$U$$, $$V$$, $$W$$.
 
-We can stack these vectors into three matrices $$U$$, $$V$$, and $$W$$ Following this method, Strassen's algorithm (shown above) can be represented as:\
-![](/assets/images/uvw.png){: width="300"}
+We are now on the verge of seeing how this can be reformulated as "game" which we can use deep reinforcement learning to tackle. Consider as an intial state the zero tensor  $$\mathcal{S}=0$$ of same size as $$\mathcal{T}$$. We can define an "action" as the process of choosing three vectors $${\bf u}$$, $${\bf v}$$, and $${\bf w}$$, each of length 4, and performing the following update:\
+$$s_{ijk} \leftarrow s_{ijk} + u_iv_jw_k$$
 
-
-
-# Describing this as a game
-
-It should now be clearer how this can be cast as a reinforcement learning problem. It will be more convenient to set the initial state as $$\mathcal{S}=\mathcal{T}$$ and subtract, rather than add, the $${\bf u}$$, $${\bf v}$$, and $${\bf w}$$ contributions at each step. Our goal is to find the smallest number steps necessary to arrive at $$\mathcal{S}=0$$.
-
-At first glance it might seem that there is little coherent structure to efficient algorithms and given the discrete nature of the steps it will be hard to do better than trial-and-error.
-In Strassen's algorithm for instance $$a_1b_4$$ contributes to three intermediate variables ($$m_1$$, $$m_3$$, and $$m_5$$) despite not contributing to any of the elements of $$C$$.
-
+Finding a tensor decomposition is equivalent to discovering a sequence of actions which take us
+from $$\mathcal{S}=0$$ to the target state $$\mathcal{S}=\mathcal{T}$$. In practice, it is more convenient to set the initial state as $$\mathcal{S}=\mathcal{T}$$ and subtract, rather than add, at each step. Our goal is to find the smallest number steps necessary to arrive at $$\mathcal{S}=0$$. This is referred to as TensorGame and the approach of AlphaTensor is broadly as follows:
 
 1. Build a policy model to choose an action $$\{ {\bf u,  v,  w}\}$$ given a state $$\mathcal{S}$$.
 2. Define a sufficiently dense reward function to provide feedback to the policy model.
 3. Develop a RL/exploration algorithm to efficiently search for low-rank decompositions.
 4. Supplement the RL problem with a supervised learning problem on known decompositions.
+
+
+![](/assets/images/best_ranks.png){: width="400"}
 
 
 ## Reward function
@@ -218,9 +205,13 @@ $$\tau(s)=\text{log }N(s)/\text{log }\bar{N}$$ if $$N(s)>\bar{N}$$, else $$1$$.
 [axial-attn]: https://arxiv.org/abs/1912.12180
 [distributional-rl]: https://arxiv.org/abs/1710.10044
 [mcts-wiki]: https://en.wikipedia.org/wiki/Monte_Carlo_tree_search
+[arithmetic-complexity]: https://en.wikipedia.org/wiki/Computational_complexity_of_mathematical_operations#Arithmetic_functions
+[tensor-decomp]: https://en.wikipedia.org/wiki/Tensor_decomposition
+[game-tree]: https://en.wikipedia.org/wiki/Game_tree
 
 
 [assembly-ai]: https://www.assemblyai.com/blog/deepminds-alphatensor-explained/
+[kdd]: https://www.kdnuggets.com/2023/03/first-open-source-implementation-deepmind-alphatensor.html
 
 [my-repo]: https://github.com/kurtosis/mat_mul
 [code-synth-demos]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/datasets.py#L20
