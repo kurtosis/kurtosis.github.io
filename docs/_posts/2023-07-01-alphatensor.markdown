@@ -6,9 +6,10 @@ categories: alphatensor
 usemathjax: true
 ---
 
-DeepMind's AlphaTensor system ([blog][alphatensor-blog], [paper][alphatensor-nature]), introduced in October, 2022 uses deep reinforcement learning to discover efficient algorithms for matrix multiplication. It has, perhaps understandably, not received the same level of attention as recent advances in generative AI. However, there are a few aspects of this work which I think make it a particularly interesting application of deep learning:
-* The complexity of the problem comes from its underlying mathematical structure. The challenge is not extracting information from large empirical data sets (e.g. text, image, omics) but solving an NP-hard problem. Also, unlike two-player games, such as chess and go, it cannot rely on self-play to provide continuous feedback and bootstrap improvements.
-* AlphaTensor uses several techniques to tackle the problem, such as a transformer network to select actions from a high dimensional, discrete space and Monte Carlo tree search (MCTS) to solve the reinforcement learning problem.
+DeepMind's AlphaTensor system ([blog post][alphatensor-blog], [paper][alphatensor-nature]), introduced in October, 2022 uses deep reinforcement learning to discover efficient algorithms for matrix multiplication. It has, perhaps understandably, not received the same level of attention as recent advances in generative AI. However, there are a few aspects of this work which make it a particularly interesting development in deep learning:
+* The complexity of the problem is rooted in its fundamental mathematical structure, not in extracting information from large empirical (i.e. social or physical) data sets such as text, image, or omics data.
+* The action space is much larger ($$10^{10}\times$$ larger!) than that of games like chess and Go, making it extremely challenging to search the game tree efficiently. The number of algorithms discovered demonstrates that this area is far richer than was previously understood.
+* AlphaTensor uses several state-of-the-art techniques to tackle the problem, such as a transformer network to select actions from a high dimensional, discrete space and Monte Carlo tree search (MCTS) to solve the reinforcement learning problem.
 
 In this post I'll break down the matrix multiplication problem and walk through [my implementation][my-repo] of AlphaTensor. (Most figures below are from the AlphaTensor paper.)
 
@@ -20,8 +21,8 @@ It may seem surprising that the standard way of doing matrix multiplication is n
 2. For large arithmetic calculations, there are many sequences of operations which produce the correct result.
 
 To illustrate (1), try calculating each of the following in your head:
-<center> A) $$15047 + 30821$$ </center>
-<center> B) $$15047 \times 30821$$ </center>
+<center> $$15047 + 30821$$ </center>
+<center> $$15047 \times 30821$$ </center>
 It should be clear that multiplication is more work!
 
 <!-- (you might even be able to do the addition in your head, but for the multiplication this would require a strong memory!). -->
@@ -52,7 +53,7 @@ The standard way to compute this is:
 
 $$c_1 = a_1b_1 + a_2b_3 \text{, etc.}$$
 
-Each element of the product requires two multiplications, resulting in eight multiplications overall. In 1969, [Strassen][strassen] showed that this can be computed using a two-level method which requires only seven multiplications.
+Each element of the product requires two multiplications, resulting in eight multiplications overall. In 1969, mathematician [Volker Strassen][strassen] showed that this can be computed using a two-level method which requires only seven multiplications.
 
 
 ![](/assets/images/strassen_algo.png){: width="200"}
@@ -96,12 +97,12 @@ $$s_{ijk} \leftarrow s_{ijk} + u_iv_jw_k$$
 Finding a tensor decomposition is equivalent to discovering a sequence of actions which take us
 from $$\mathcal{S}=0$$ to the target state $$\mathcal{S}=\mathcal{T}$$. In practice, it is more convenient to set the initial state as $$\mathcal{S}=\mathcal{T}$$ and subtract, rather than add, at each step. Our goal is to find the smallest number steps necessary to arrive at $$\mathcal{S}=0$$. This is referred to as TensorGame.
 
-To cut to the chase, the table below shows the best results discovered by AlphaTensor for multiplication of various matrix sizes. Each row shows the number of steps (or rank) needed to multiply matrices of sizes $$n \times m$$ and $$m \times p$$. In each case, AlphaTensor was able to match or surpass the current best known algorithm. To be fair, the results themselves are not a major improvement in computational efficiency. What is most impressive about AlphaTensor is that it demonstrates a promising method for searching extremely large combinatorial spaces which can be applied to many problems.
+The table below shows the best results discovered by AlphaTensor for multiplication of various matrix sizes. Each row shows the number of steps (or rank) needed to multiply matrices of sizes $$n \times m$$ and $$m \times p$$. In each case, AlphaTensor was able to match or surpass the current best known algorithm (the paper even reports improvements up to size $$(11, 12, 12)$$). To be sure, the results themselves are not a major improvement in computational efficiency. Rather what is most impressive is that AlphaTensor demonstrates a promising method for searching extremely large combinatorial spaces which can be applied to many problems.
 
 ![](/assets/images/best_ranks.png){: width="400"}
 
 The approach of AlphaTensor is broadly as follows:
-1. Build a model to choose an action $$\{ {\bf u,  v,  w}\}$$, and estimate a value $$q$$, given a state $$\mathcal{S}$$.
+1. Build a model to choose an action $$\{ {\bf u,  v,  w}\}$$, and estimate a value $$Q$$, given a state $$\mathcal{S}$$.
 2. Define a sufficiently dense reward function to provide feedback to the model.
 3. Implement a RL algorithm to explore the game tree for low-rank decompositions, guided by the model's policy and value outputs.
 4. Supplement the RL problem with a supervised learning problem on known decompositions.
@@ -147,7 +148,7 @@ The torso converts the current state $$\mathcal{S}$$ (to be more precise, the pa
 
 The policy head is responsible for converting the torso's output into a distribution over the action space of the factors $$\{ {\bf u,  v,  w}\}$$ which we can run backpropagation on (during the training step) and sample from (during the action step used in MCTS). However, this action space can be too large for us to represent the distribution explicitly. Consider multiplication of $$5 \times 5$$ matrices. In this case each factor is of length $$25$$. In the AlphaTensor paper, entries in the factors are restricted to the five values $$(-2, -1, 0, 1, 2)$$ and the cardinality of the action space is $$5^{3 \cdot 25} \approx 10^{52}$$.
 
-The solution is to use a transformer architecture to represent an autoregressive policy. In other words, an action is produced sequentially, with each token in the factors drawn from a distribution that is conditioned on the previous tokens (via self-attention), as well as on the embedding produced by the torso (via cross-attention). Naively, we might treat each of the $$75$$ entries in the three factors as a token. However, now we have moved from an enormous action space to the opposite extreme, a transformer with a vocabulary size of only $$5$$! Recall that transformers learn embeddings for each "word" in the vocabulary- the benefit of this is most apparent for large vocabularies. Note that for any sequential data, we can use various representations that trade off between vocabulary size and sequence length. In this example, we can split the factors into chunks of 5 entries and represent each chunk as a token. With this approach, the vocabulary size (i.e. the number of distinct values a chunk can take on) increases to $$5^5 = 3125$$ and the sequence length decreases to $$15$$. This vocabulary size is still small enough to learn embeddings over, but we have also reduced the context length that the transformer must learn to attend to.
+The solution is to use a transformer architecture to represent an autoregressive policy ([code][code-pred-act-log]). In other words, an action is produced sequentially, with each token in the factors drawn from a distribution that is conditioned on the previous tokens (via self-attention), as well as on the embedding produced by the torso (via cross-attention). Naively, we might treat each of the $$75$$ entries in the three factors as a token. However, now we have moved from an enormous action space to the opposite extreme, a transformer with a vocabulary size of only $$5$$! Recall that transformers learn embeddings for each "word" in the vocabulary- the benefit of this is most apparent for large vocabularies. Note that for any sequential data, we can use various representations that trade off between vocabulary size and sequence length. In this example, we can split the factors into chunks of 5 entries and represent each chunk as a token. With this approach, the vocabulary size (i.e. the number of distinct values a chunk can take on) increases to $$5^5 = 3125$$ and the sequence length decreases to $$15$$. This vocabulary size is still small enough to learn embeddings over, but we have also reduced the context length that the transformer must learn to attend to.
 
 
 ![](/assets/images/policy_head.png){: width="600"}
@@ -165,7 +166,7 @@ So far we've described our network architecture and a method of training it on s
 
 To start - the purpose of the MCTS step is to generate a set of games (or trajectories) which will be added to the training dataset (as mentioned above). Also, of course, this is the step in which we are hoping to discover a low-rank decomposition! Naively, we might consider producing a trajectory by sequentially sampling actions from the policy head and updating $$\mathcal{S}$$. Perhaps we could generate several trajectories and add the best ones to the training buffer? Unsurprisingly, this simple approach is inefficient and MCTS is a way to do better. It works by building a search tree (in which the nodes are states and the edges are actions) and using a decision rule to decide which branches to explore further, before finally choosing which action to take from the root state. Let's break it down:
 
-1. Initialize a tree with our initial state $$A$$ as the root. We next wish to extend the tree which we will do by sampling $$n_{samples} = 2$$ actions from our network, given input state $$A$$. These actions produce the child states $$B$$ and $$C$$.\
+1. Initialize a tree with our initial state $$A$$ as the root. We next wish to extend the tree which we do by sampling $$n_{samples} = 2$$ actions from our network ([code][code-extend-tree]), given input state $$A$$. These actions produce the child states $$B$$ and $$C$$.\
 ![](/assets/images/a_c_graph.png){: height="155"}
 2. To continue extending the tree we must choose which leaf node ($$B$$ or $$C$$) to extend. We do this by starting at $$A$$ and using a decision rule (which I will explain below) to traverse the tree. In this example, the rule selects the branch $$A \rightarrow B$$. As above, we sample $$n_{samples}$$ actions at state $$B$$, extending the tree to $$D$$ and $$E$$.\
 ![](/assets/images/a_e_graph.png){: height="200"}
@@ -173,13 +174,13 @@ To start - the purpose of the MCTS step is to generate a set of games (or trajec
 ![](/assets/images/a_g_graph.png){: height="200"}
 4. In the next iteration, we must apply the decision rule twice to reach a leaf node, selecting $$A \rightarrow C$$ and then $$C \rightarrow F$$, before extending the tree from $$F$$.\
 ![](/assets/images/a_i_graph.png){: height="200"}
-5. Continue until we have extended the tree $$n_{sim}=4$$ times. At this point, we are done exploration and will choose the action to take from $$A$$. We do this using the decision rule again. In this illustration we select $$A \rightarrow B$$ as the first action in our trajectory.\
+5. Continue until we have extended the tree $$n_{sim}=4$$ times. At this point, we are done exploration and will choose the action to take from $$A$$. We do this using the decision rule again ([code][code-mc-action]). In this illustration we select $$A \rightarrow B$$ as the first action in our trajectory.\
 ![](/assets/images/a_c_final_action.png){: height="200"}
-6. We now repeat the same process, starting from $$C$$ to choose the second action in our trajectory. Rather than build a new tree from scratch, we start with the subtree below $$C$$ and extend it until it has $$n_{sim}$$ branch points.\
+6. We now repeat the same process, starting from $$C$$ to choose the second action in our trajectory. Rather than build a new tree from scratch, we start with the subtree below $$C$$ and extend it until it has $$n_{sim}$$ branch nodes.\
 ![](/assets/images/c_i_graph.png){: height="150"}
 
 
-The decision rule used above selects the action $$a$$ which maximizes the following quantity: $$Q(s,a) + c(s) \cdot \hat{\pi}(s,a) \frac{ \sqrt{\sum_b{N(s,b)}}}{1 + N(s,a)} $$\
+The decision rule used above ([code][code-decision-rule]) selects the action $$a$$ which maximizes the following quantity: $$Q(s,a) + c(s) \cdot \hat{\pi}(s,a) \frac{ \sqrt{\sum_b{N(s,b)}}}{1 + N(s,a)} $$\
 where
 * $$Q(s,a)$$ - an action value, generated by value head
 * $$N(s,a)$$ - the number of MC visits to the state-action pair $$(s,a)$$
@@ -206,6 +207,7 @@ $$\tau(s)=\text{log }N(s)/\text{log }\bar{N}$$ if $$N(s)>\bar{N}$$, else $$1$$.
 # Additional Details
 The AlphaTensor paper includes some additional details which I did not implement. For completeness I list them here:
 * Data augmentation
+* Modular arithmetic
 
 
 [alphatensor-blog]: https://www.deepmind.com/blog/discovering-novel-algorithms-with-alphatensor
@@ -237,3 +239,7 @@ The AlphaTensor paper includes some additional details which I did not implement
 [code-backward-pass]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/act.py#L223
 [code-improved-policy]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/act.py#L308
 [code-actor-pred]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/act.py#L8
+[code-pred-act-log]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L174
+[code-extend-tree]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/act.py#L186
+[code-decision-rule]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/act.py#L250
+[code-mc-action]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/act.py#L109
