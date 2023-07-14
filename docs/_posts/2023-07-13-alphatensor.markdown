@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "Breaking Down DeepMind's AlphaTensor"
-date:   2023-07-01 14:23:37 -0400
+date:   2023-07-13
 categories: alphatensor
 usemathjax: true
 ---
@@ -65,6 +65,7 @@ That's a surprising result! However it seems difficult to discern any structure 
 
 We can describe the multiplication $$C=AB$$ by a three-dimensional tensor $$\mathcal{T}$$ where the element $$t_{ijk}$$ denotes the contribution of $$a_ib_j$$ to $$c_k$$.
 <!-- (Note that the dimensions of $$\mathcal{T}$$ are $$(n \times m) \times (m \times p) \times (n \times p)$$.) -->
+
 $$c_k = \sum_{i,j}{t_{ijk}a_ib_j} $$
 
 The elements of $$\mathcal{T}$$ are all in $$\{0, 1\}$$ and we can visualize it by shading each of the non-zero elements:\
@@ -81,7 +82,7 @@ and similarly for $$c_2$$, $$c_3$$, and $$c_4$$.
 
 ### Matrix Multiplication Algorithms are Tensor Decompositions
 
-Note that Strassen's algorithm can be described as performing a series of "steps", each of which has four parts:
+Strassen's algorithm can be described as performing a series of "steps", each of which has four parts:
 1. Compute $$u$$, a linear combination of elements of $$A$$. (highlighted in green above)
 2. Compute $$v$$, a linear combination of elements of $$B$$. (highlighted in purple above)
 3. Compute the product $$m=uv$$.
@@ -89,15 +90,15 @@ Note that Strassen's algorithm can be described as performing a series of "steps
 
 Each step involves one scalar multiplication and Strassen's algorithm requires seven steps. This is a [tensor decomposition][tensor-decomp] of $$\mathcal{T}$$. It can be expressed more compactly by stacking the seven steps into three matrices $$U$$, $$V$$, and $$W$$:\
 ![](/assets/images/uvw.png){: width="300"}\
-Each column represents one step in the algorithm, defined by the column vectors $${\bf u}$$, $${\bf v}$$, $${\bf w}$$. An efficient algorithm can equivalently be thought of as a low-rank decomposition of $$\mathcal{T}$$ - "rank" here refers to the number of columns in $$U$$, $$V$$, $$W$$.
+Each column represents one step in the algorithm, defined by the column vectors $${\bf u}$$, $${\bf v}$$, $${\bf w}$$. An efficient algorithm can equivalently be thought of as a low-rank decomposition of $$\mathcal{T}$$ - "rank" here refers to the number of columns in $$U$$, $$V$$, and $$W$$.
 
-We are now on the verge of seeing how this can be reformulated as "game" which we can use deep reinforcement learning to tackle. Consider as an intial state the zero tensor  $$\mathcal{S}=0$$ of same size as $$\mathcal{T}$$. We can define an "action" as the process of choosing three vectors $${\bf u}$$, $${\bf v}$$, and $${\bf w}$$, each of length 4, and performing the following update:\
+We are now on the verge of seeing how this can be reformulated as "game" which we can use deep reinforcement learning to tackle. Consider as an intial state the zero tensor  $$\mathcal{S}=0$$ of same dimensions as $$\mathcal{T}$$. We can define an "action" as the process of choosing three vectors $${\bf u}$$, $${\bf v}$$, and $${\bf w}$$, each of length 4, and performing the following update:\
 $$s_{ijk} \leftarrow s_{ijk} + u_iv_jw_k$$
 
 Finding a tensor decomposition is equivalent to discovering a sequence of actions which take us
 from $$\mathcal{S}=0$$ to the target state $$\mathcal{S}=\mathcal{T}$$. In practice, it is more convenient to set the initial state as $$\mathcal{S}=\mathcal{T}$$ and subtract, rather than add, at each step. Our goal is to find the smallest number steps necessary to arrive at $$\mathcal{S}=0$$. This is referred to as TensorGame.
 
-The table below shows the best results discovered by AlphaTensor for multiplication of various matrix sizes. Each row shows the number of steps (or rank) needed to multiply matrices of sizes $$n \times m$$ and $$m \times p$$. In each case, AlphaTensor was able to match or surpass the current best known algorithm (the paper even reports improvements up to size $$(11, 12, 12)$$). To be sure, the results themselves are not a major improvement in computational efficiency. Rather what is most impressive is that AlphaTensor demonstrates a promising method for searching extremely large combinatorial spaces which can be applied to many problems.
+The table below shows the best results discovered by AlphaTensor for multiplication of various matrix sizes. Each row shows the number of steps (or rank) needed to multiply matrices of sizes $$n \times m$$ and $$m \times p$$. In each case, AlphaTensor was able to match or surpass the current best known algorithm - the paper even reports improvements up to size $$(11, 12, 12)$$. To be clear, the results themselves are not a major improvement in computational efficiency. Rather what is most impressive is that AlphaTensor demonstrates a promising method for searching extremely large combinatorial spaces which can be applied to many problems.
 
 ![](/assets/images/best_ranks.png){: width="400"}
 
@@ -108,7 +109,6 @@ The approach of AlphaTensor is broadly as follows:
 4. Supplement the RL problem with a supervised learning problem on known decompositions.
 
 In the rest of this post I'll walk through the details of AlphaTensor. I'll start with (2) and (4), as these are fairly straightforward. Next I'll describe the model architecture for (1). Finally I'll cover the Monte Carlo tree search algorithm used in (3) - this is not thoroughly described in the AlphaTensor paper and is fairly complex.
-
 
 ## Reward function
 
