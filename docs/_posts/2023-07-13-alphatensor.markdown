@@ -141,7 +141,7 @@ Periodically (after a given number of epochs), MCTS is performed, starting from 
 
 ### Torso
 
-The torso converts the current state $$\mathcal{S}$$ (to be more precise, the past $$n$$ states in the game), as well as any scalar inputs (such as the time index of the current action), to an embedding that feeds into the policy and value heads. It projects the $$4 \times 4 \times 4$$ tensor onto three $$4 \times 4$$ grids, one along each of its three directions. Following this, attention-based blocks ([code][code-attention]) are used to propagate information between the three grids. A block ([code][code-torso-attention]) has three stages - in each stage one of the three pairs of grids is concatenated and axial attention ([code][axial-attn]) is applied. The output of the final block is flattened to an embedding vector which is the output of the torso.
+The torso converts the current state $$\mathcal{S}$$ (to be more precise, the past $$n$$ states in the game), as well as any scalar inputs (such as the time index of the current action), to an embedding that feeds into the policy and value heads. It projects the $$4 \times 4 \times 4$$ tensor onto three $$4 \times 4$$ grids, one along each of its three directions. Following this, attention-based blocks ([code][code-torso-attention]) are used to propagate information between the three grids. A block has three stages - in each stage one of the three pairs of grids is concatenated and [axial attention][axial-attn] is applied. The output of the final block is flattened to an embedding vector which is the output of the torso.
 
 ![](/assets/images/torso_architecture.png){: width="800"}
 
@@ -167,13 +167,13 @@ To start - the purpose of the MCTS step is to generate a set of games (or trajec
 
 1. Initialize a tree with our initial state $$A$$ as the root. We next wish to extend the tree which we do by sampling $$n_{samples} = 2$$ actions from our network ([code][code-extend-tree]), given input state $$A$$. These actions produce the child states $$B$$ and $$C$$.\
 ![](/assets/images/a_c_graph.png){: height="155"}
-2. To continue extending the tree we must choose which leaf node ($$B$$ or $$C$$) to extend. We do this by starting at $$A$$ and using a decision rule (which I explain below) to traverse the tree. In this example, the rule selects the branch $$A \rightarrow B$$. As above, we sample $$n_{samples}$$ actions at state $$B$$, extending the tree to $$D$$ and $$E$$.\
+2. To continue extending the tree we must choose which leaf node ($$B$$ or $$C$$) to extend. We do this by starting at $$A$$ and using a decision rule (which I explain below) to traverse the tree. In this example, the rule selects the branch $$A \rightarrow B$$ ([code][code-select-next]). As above, we sample $$n_{samples}$$ actions at state $$B$$, extending the tree to $$D$$ and $$E$$.\
 ![](/assets/images/a_e_graph.png){: height="200"}
 3. We repeat the process in (2), and this time our decision rule selects $$A \rightarrow C$$ instead (we'll see why below) and we now extend the tree from $$C$$.\
 ![](/assets/images/a_g_graph.png){: height="200"}
 4. In the next iteration, we must apply the decision rule twice to reach a leaf node, selecting $$A \rightarrow C$$ followed by $$C \rightarrow F$$, before extending the tree from $$F$$.\
 ![](/assets/images/a_i_graph.png){: height="200"}
-5. Continue until we have extended the tree $$n_{sim}=4$$ times. At this point, we are done exploration and will choose which action to take from $$A$$. We do this using the decision rule again ([code][code-mc-action]). In this illustration we select $$A \rightarrow C$$ as the first action in our trajectory.\
+5. Continue until we have extended the tree $$n_{sim}=4$$ times. At this point, we are done exploration and will choose which action to take from $$A$$. We do this using the decision rule again. In this illustration we select $$A \rightarrow C$$ as the first action in our trajectory.\
 ![](/assets/images/a_c_final_action.png){: height="200"}
 6. We now repeat the same process, starting from $$C$$ to choose the next action in our trajectory. Rather than build a new tree from scratch, we start with the subtree below $$C$$ and extend it until it has $$n_{sim}$$ branch nodes.\
 ![](/assets/images/c_i_graph.png){: height="150"}
@@ -234,18 +234,25 @@ The AlphaTensor paper includes some additional details which I did not implement
 [kdd]: https://www.kdnuggets.com/2023/03/first-open-source-implementation-deepmind-alphatensor.html
 
 [my-repo]: https://github.com/kurtosis/mat_mul
-[code-synth-demos]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/datasets.py#L20
-[code-terminal-reward]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/act.py#L59
-[code-torso]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L99
-[code-torso-attention]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L71
-[code-policy]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L211
-[code-value]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L283
-[code-attention]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L71
-[code-quantile]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L300
-[code-backward-pass]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/act.py#L223
-[code-improved-policy]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/act.py#L308
-[code-actor-pred]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/act.py#L8
-[code-pred-act-log]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/model.py#L174
-[code-extend-tree]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/act.py#L186
-[code-decision-rule]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/act.py#L250
-[code-mc-action]: https://github.com/kurtosis/mat_mul/blob/7fa10f5fd351bff72712b122888ee220354f5e45/act.py#L109
+[code-terminal-reward]: https://github.com/kurtosis/mat_mul/blob/2ad32d231fc2d82e9ffc66a660b60581e5458bfc/act.py#L59
+[code-synth-demos]: https://github.com/kurtosis/mat_mul/blob/2ad32d231fc2d82e9ffc66a660b60581e5458bfc/datasets.py#L20
+[code-torso]: https://github.com/kurtosis/mat_mul/blob/2ad32d231fc2d82e9ffc66a660b60581e5458bfc/model.py#L85
+[code-policy]: https://github.com/kurtosis/mat_mul/blob/2ad32d231fc2d82e9ffc66a660b60581e5458bfc/model.py#L197
+[code-value]: https://github.com/kurtosis/mat_mul/blob/2ad32d231fc2d82e9ffc66a660b60581e5458bfc/model.py#L266
+[code-torso-attention]: https://github.com/kurtosis/mat_mul/blob/2ad32d231fc2d82e9ffc66a660b60581e5458bfc/model.py#L70
+[code-pred-act-log]: https://github.com/kurtosis/mat_mul/blob/2ad32d231fc2d82e9ffc66a660b60581e5458bfc/model.py#L160
+[code-quantile]: https://github.com/kurtosis/mat_mul/blob/2ad32d231fc2d82e9ffc66a660b60581e5458bfc/model.py#L283
+[code-actor-pred]: https://github.com/kurtosis/mat_mul/blob/2ad32d231fc2d82e9ffc66a660b60581e5458bfc/act.py#L8
+[code-extend-tree]: https://github.com/kurtosis/mat_mul/blob/2ad32d231fc2d82e9ffc66a660b60581e5458bfc/act.py#L182
+[code-select-next]: https://github.com/kurtosis/mat_mul/blob/2ad32d231fc2d82e9ffc66a660b60581e5458bfc/act.py#L108
+[code-decision-rule]: https://github.com/kurtosis/mat_mul/blob/2ad32d231fc2d82e9ffc66a660b60581e5458bfc/act.py#L240
+[code-backward-pass]: https://github.com/kurtosis/mat_mul/blob/2ad32d231fc2d82e9ffc66a660b60581e5458bfc/act.py#L219
+[code-improved-policy]: https://github.com/kurtosis/mat_mul/blob/2ad32d231fc2d82e9ffc66a660b60581e5458bfc/act.py#L279
+
+
+
+
+
+
+
+
