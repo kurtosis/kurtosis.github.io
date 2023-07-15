@@ -131,7 +131,7 @@ and similarly for \(c_2\), \(c_3\), and \(c_4\).</p>
   <li>Add \(m\) (multiplied by a vector \({\bf w}\)) to the elements of \(C\). (highlighted in yellow above)</li>
 </ol>
 
-<p>Each action involves one scalar multiplication and Strassen’s algorithm requires seven action. It can be expressed more compactly by stacking the seven action into three matrices \((U,V,W)\). Each column represents one step in an algorithm to compute \(C\), defined by the column vectors \(({\bf u}\), \({\bf v}\), \({\bf w})\).<br />
+<p>Each action involves one scalar multiplication and Strassen’s algorithm requires seven actions. It can be expressed more compactly by stacking these into three matrices \((U,V,W)\). Each column represents one action in an algorithm to compute \(C\), defined by the column vectors \(({\bf u}\), \({\bf v}\), \({\bf w})\).<br />
 <img src="/assets/images/uvw.png" alt="" width="300" />\</p>
 
 <p>Now for the main trick - \((U,V,W)\) can equivalently be viewed as a <a href="https://en.wikipedia.org/wiki/Tensor_decomposition">tensor decomposition</a> of \(\mathcal{T}\). Here’s what this means: consider the zero tensor  \(\mathcal{S}=0\) of same dimensions as \(\mathcal{T}\). For each set of factors \(({\bf u}\), \({\bf v}\), \({\bf w})\), perform the following update action:<br />

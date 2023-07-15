@@ -88,7 +88,7 @@ Strassen's algorithm can be described as performing a sequence of actions, each 
 3. Compute the product $$m=uv$$.
 4. Add $$m$$ (multiplied by a vector $${\bf w}$$) to the elements of $$C$$. (highlighted in yellow above)
 
-Each action involves one scalar multiplication and Strassen's algorithm requires seven action. It can be expressed more compactly by stacking the seven action into three matrices $$(U,V,W)$$. Each column represents one step in an algorithm to compute $$C$$, defined by the column vectors $$({\bf u}$$, $${\bf v}$$, $${\bf w})$$.\
+Each action involves one scalar multiplication and Strassen's algorithm requires seven actions. It can be expressed more compactly by stacking these into three matrices $$(U,V,W)$$. Each column represents one action in an algorithm to compute $$C$$, defined by the column vectors $$({\bf u}$$, $${\bf v}$$, $${\bf w})$$.\
 ![](/assets/images/uvw.png){: width="300"}\
 
 
