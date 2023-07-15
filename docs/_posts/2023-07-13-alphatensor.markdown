@@ -9,7 +9,7 @@ usemathjax: true
 DeepMind's AlphaTensor  ([blog][alphatensor-blog], [paper][alphatensor-nature]), introduced in October 2022, uses deep reinforcement learning to discover efficient algorithms for matrix multiplication. It has, perhaps understandably, not received the same level of attention as recent advances in generative AI. However, there are a few aspects of this work which make it a particularly interesting development in deep learning:
 * The complexity of the problem is rooted in its fundamental mathematical structure, not in extracting information from large empirical (i.e. social or physical) data sets such as text, image, or omics data.
 * The action space is much larger ($$10^{10}\times$$ larger!) than that of games like chess and Go, making it extremely challenging to search the game tree efficiently. The number of algorithms discovered demonstrates that this area is far richer than was previously understood.
-* AlphaTensor uses several state-of-the-art techniques to tackle the problem, including a transformer network to select actions from a high dimensional, discrete space and Monte Carlo tree search (MCTS) to solve the reinforcement learning problem.
+* AlphaTensor combines multiple state-of-the-art techniques to tackle the problem, including a transformer network to select actions from a high dimensional, discrete space and Monte Carlo tree search (MCTS) to solve the reinforcement learning problem.
 
 In this post I break down the matrix multiplication problem and walk through [my implementation][my-repo] of AlphaTensor. (Most figures below are from the AlphaTensor paper.)
 
@@ -33,7 +33,7 @@ To illustrate (2), consider the example (courtesy of [Assembly AI][assembly-ai])
 
 $$c_1 = a \cdot a$$\
 $$c_2 = b \cdot b$$\
-return $$c_1 - c2$$
+return $$c_1 - c_2$$
 
 $$d_1 = a + b$$\
 $$d_2 = a - b$$\
@@ -64,15 +64,15 @@ That's a surprising result! But it probably also comes across as a clever one-of
 ### Matrix Multiplication can be Expressed as a Tensor
 
 We can describe the multiplication $$C=AB$$ by a three-dimensional tensor $$\mathcal{T}$$ where the element $$t_{ijk}$$ denotes the contribution of $$a_ib_j$$ to $$c_k$$.
-<!-- (Note that the dimensions of $$\mathcal{T}$$ are $$(n \times m) \times (m \times p) \times (n \times p)$$.) -->
 
 $$c_k = \sum_{i,j}{t_{ijk}a_ib_j} $$
 
-The elements of $$\mathcal{T}$$ are all in $$\{0, 1\}$$ and we can visualize it by shading each of the non-zero elements:\
+The elements of $$\mathcal{T}$$ are all in $$\{0, 1\}$$ and we can visualize it by shading each of the non-zero elements:
+
 ![](/assets/images/tensor_3d.png){: width="300"}
 
+Note that $$c_1 = a_1b_1 + a_2b_3$$ is denoted by:
 
-Note that $$c_1 = a_1b_1 + a_2b_3$$ is denoted by:\
 $$t_{111} = 1$$\
 $$t_{231} = 1$$\
 $$t_{ij1} = 0 \space \forall \space \text{other} \space (i, j)$$\
@@ -88,13 +88,16 @@ Strassen's algorithm can be described as performing a sequence of actions, each 
 3. Compute the product $$m=uv$$.
 4. Add $$m$$ (multiplied by a vector $${\bf w}$$) to the elements of $$C$$. (highlighted in yellow above)
 
-Each action involves one scalar multiplication and Strassen's algorithm requires seven actions. It can be expressed more compactly by stacking these into three matrices $$(U,V,W)$$. Each column represents one action in an algorithm to compute $$C$$, defined by the column vectors $$({\bf u}$$, $${\bf v}$$, $${\bf w})$$.\
-![](/assets/images/uvw.png){: width="300"}\
+Each action involves one scalar multiplication and Strassen's algorithm requires seven actions. It can be expressed more compactly by stacking these into three matrices $$(U,V,W)$$. Each column represents one action in an algorithm to compute $$C$$, defined by the column vectors $$({\bf u}$$, $${\bf v}$$, $${\bf w})$$.
+
+![](/assets/images/uvw.png){: width="300"}
 
 
-Now for the main trick - $$(U,V,W)$$ can equivalently be viewed as a [tensor decomposition][tensor-decomp] of $$\mathcal{T}$$. Here's what this means: consider the zero tensor  $$\mathcal{S}=0$$ of same dimensions as $$\mathcal{T}$$. For each set of factors $$({\bf u}$$, $${\bf v}$$, $${\bf w})$$, perform the following update action:\
-$$s_{ijk} \leftarrow s_{ijk} + u_iv_jw_k$$\
-After doing this for all seven columns we end up with $$\mathcal{S}=\mathcal{T}$$. Thus we can reframe the problem as a single player game whose goal is to find a sequence of actions which produces a low-rank decomposition of $$\mathcal{T}$$. (In practice, we set the initial state as $$\mathcal{S}=\mathcal{T}$$ and subtract $$u_iv_jw_k$$ at each step, so that the target state is always $$\mathcal{S}=0$$.) This is referred to as TensorGame and AlphaTensor is a method for learning to play this game well.
+Now for the main trick - $$(U,V,W)$$ can equivalently be viewed as a [tensor decomposition][tensor-decomp] of $$\mathcal{T}$$. Here's what this means: consider the zero tensor  $$\mathcal{S}=0$$ of same dimensions as $$\mathcal{T}$$. For each set of factors $$({\bf u}$$, $${\bf v}$$, $${\bf w})$$, perform the following update to $$\mathcal{S}$$:
+
+$$s_{ijk} \leftarrow s_{ijk} + u_iv_jw_k$$
+
+After doing this for all seven columns we end up with $$\mathcal{S}=\mathcal{T}$$. Thus we can reframe the problem as a single player game whose goal is to find a sequence of actions which produces a low-rank decomposition of $$\mathcal{T}$$. (In practice, we set the initial state as $$\mathcal{S}=\mathcal{T}$$ and subtract $$u_iv_jw_k$$ at each step, so that the target state is always $$\mathcal{S}=0$$.) This is referred to as TensorGame and AlphaTensor is a method for learning to play this game.
 
 The table below shows the best results discovered by AlphaTensor for multiplication of various matrix sizes. Each row shows the number of steps (or rank) needed to multiply matrices of sizes $$n \times m$$ and $$m \times p$$. In each case, AlphaTensor was able to match or surpass the current best known algorithm - the paper even reports improvements up to size $$(11, 12, 12)$$. To be clear, the results themselves are not a major improvement in computational efficiency. Rather what is most impressive is that AlphaTensor demonstrates a promising method for searching extremely large combinatorial spaces which can be applied to many problems.
 
@@ -110,7 +113,7 @@ In the rest of this post I'll walk through the details of AlphaTensor. I'll star
 
 ## Reward function
 
-Since the goal is to minimize the number of actions to reach a target state, AlphaTensor provides a reward of $$-1$$ for each action taken. Games are terminated when the target state is reached or after a finite number $$(R_{limit})$$ of steps. If we still have a non-zero tensor $$\mathcal{S}$$ at this point, an additional reward of $$-\gamma(\mathcal{S})$$ is given, equal to "an upper bound on the rank of the terminal tensor" ([code][code-terminal-reward]). In simpler terms, $$\gamma(\mathcal{S})$$ is roughly the number of non-zero entries remaining in $$\mathcal{S}$$ - we know that each of these could be eliminated by a single action. Note that this terminal reward plays an important role in creating a dense reward function. Without it, the agent would only recieve useful feedback when it reaches the target state within $$R_{limit}$$ steps - which is effectively a sparse reward.
+Since the goal is to minimize the number of actions to reach a target state, AlphaTensor provides a reward of $$-1$$ for each action taken. Games are terminated when the target state is reached or after a finite number $$(R_{limit})$$ of steps. If $$\mathcal{S}$$ is still non-zero at this point, an additional reward of $$-\gamma(\mathcal{S})$$ is given, equal to "an upper bound on the rank of the terminal tensor" ([code][code-terminal-reward]). In simpler terms, $$\gamma(\mathcal{S})$$ is roughly the number of non-zero entries remaining in $$\mathcal{S}$$ - we know that each of these could be eliminated by a single action. Note that this terminal reward plays an important role in creating a dense reward function. Without it, the agent would only recieve useful feedback when it reaches the target state within $$R_{limit}$$ steps - which is effectively a sparse reward.
 
 ## Supervised learning
 
@@ -148,7 +151,6 @@ The policy head is responsible for converting the torso's output into a distribu
 
 The solution is to use a transformer architecture to represent an autoregressive policy ([code][code-pred-act-log]). In other words, an action is produced sequentially, with each token in the factors drawn from a distribution that is conditioned on the previous tokens (via self-attention), as well as on the embedding produced by the torso (via cross-attention). Naively, we might treat each of the $$75$$ entries in the three factors as a token. However, now we have moved from an enormous action space to the opposite extreme, a transformer with a vocabulary size of only $$5$$. Recall that transformers learn embeddings for each "word" in the vocabulary- the benefit of this is most apparent for large vocabularies. Note that we can represent sequential data using different n-gram representations which trade off between vocabulary size and sequence length. In this example, we can split the factors into chunks of 5 entries (5-grams) and represent each chunk as a token. With this approach, the vocabulary size (i.e. the number of distinct values a chunk can take on) increases to $$5^5 = 3125$$ and the sequence length decreases from $$75$$ to $$15$$. This vocabulary size is still small enough to learn embeddings over, but we have also reduced the context length that the transformer must learn to attend to.
 
-
 ![](/assets/images/policy_head.png){: width="600"}
 
 ### Value Head
@@ -157,9 +159,8 @@ The value head is a multilayer perceptron whose output is an estimate of the dis
 
 ![](/assets/images/value_head.png){: width="600"}
 
-
-
 ## Monte Carlo Tree Search
+
 So far we've described our network architecture and a method of training it on synthetic demonstrations. But how do we actually play TensorGame and search for low-rank decompositions? AlphaTensor uses MCTS, as described in the [AlphaZero][alphazero] and [Sampled MuZero][muzero] papers. MCTS uses the output of the network's policy and value heads, along with an upper-confidence bound decision rule to explore the game tree. The implementation of MCTS ([code][code-actor-pred]) involves a fairly deep call stack, with several nested loops and can be difficult to grasp from reading the code directly. We'll build some intuition by illustrating this graphically.
 
 To start - the purpose of the MCTS step is to generate a set of games (or trajectories) which will be added to the training dataset (as mentioned above). Also, of course, this is the step in which we are hoping to discover a low-rank decomposition! Naively, we might consider producing a trajectory by sequentially sampling actions from the policy head and updating $$\mathcal{S}$$. Perhaps we could generate several trajectories and add the best ones to the training buffer? Unsurprisingly, this simple approach is inefficient and MCTS offers a way to do better. It works by building a search tree (in which the nodes are states and the edges are actions) and using a decision rule to decide which branches to explore further, before finally choosing which action to take from the root state. Let's break it down:
@@ -178,7 +179,10 @@ To start - the purpose of the MCTS step is to generate a set of games (or trajec
 ![](/assets/images/c_i_graph.png){: height="150"}
 
 
-The decision rule used above ([code][code-decision-rule]) selects the action $$a$$ which maximizes the following quantity: $$Q(s,a) + c(s) \cdot \hat{\pi}(s,a) \frac{ \sqrt{\sum_b{N(s,b)}}}{1 + N(s,a)} $$\
+The decision rule used above ([code][code-decision-rule]) selects the action $$a$$ which maximizes the following quantity:
+
+$$Q(s,a) + c(s) \cdot \hat{\pi}(s,a) \frac{ \sqrt{\sum_b{N(s,b)}}}{1 + N(s,a)} $$
+
 where
 * $$Q(s,a)$$ - an action value, based on the upper quantiles of the value head output.
 * $$N(s,a)$$ - the number of MC visits to the state-action pair $$(s,a)$$
@@ -193,16 +197,19 @@ Each time the tree is extended we do a backward pass ([code][code-backward-pass]
 DeepMind's MCTS procedure uses $$n_{samples}=32$$ and $$n_{sim}=800$$, producing trees with up to 25,600 nodes. Given the enormous action space, this is a pretty small subset of the full game tree!
 
 ### Policy Improvement
-Using the above steps, we can generate a MCTS trajectory. We can represent this trajectory as a sequence of actions, as well as the policy probability and value of each action:\
-$$\{(a_i, \hat{\pi}(a_i), Q(a_i)\}$$\
+
+Using the above steps, we can generate a MCTS trajectory. We can represent this trajectory as a sequence of actions, as well as the policy probability and value of each action: $$\{(a_i, \hat{\pi}(a_i), Q(a_i)\}$$
+
 We use $$\hat{\pi}(a_i)$$ and $$Q(a_i)$$ as target values to train the policy and value heads respectively. In other words, the network is trained to select action $$a_i$$ not with probability 1, but with probability $$\hat{\pi}(a_i)$$.
 
-A simple approach is to use $$\hat{\pi}(a) = N(s,a)/N(s)$$ as the policy, in other words the fraction of simulations from state $$s$$ which visit action $$a$$. Instead, AlphaTensor uses a temperature smoothing scheme to compute an improved policy ([code][code-improved-policy]):\
-$$\mathcal{I}\hat{\pi}(s,a) = [N(s,a)]^{1/\tau(s)} / \sum_b{[N(s,b)]^{1/\tau(s)}} $$\
-where\
-$$\tau(s)=\text{log }N(s)/\text{log }\bar{N}$$ if $$N(s)>\bar{N}$$, else $$1$$.
+A simple approach is to use $$\hat{\pi}(a) = N(s,a)/N(s)$$ as the policy, in other words the fraction of simulations from state $$s$$ which visit action $$a$$. Instead, AlphaTensor uses a temperature smoothing scheme to compute an improved policy ([code][code-improved-policy]):
+
+$$\mathcal{I}\hat{\pi}(s,a) = \dfrac{[N(s,a)]^{1/\tau(s)}}{\sum_b{[N(s,b)]^{1/\tau(s)}}}$$
+
+where $$\tau(s)=\text{log }N(s)/\text{log }\bar{N}$$ if $$N(s)>\bar{N}$$, else $$1$$.
 
 # Additional Details
+
 The AlphaTensor paper includes some additional details which I did not implement. For completeness I mention them here:
 * Change of basis: $$\mathcal{T}$$ is expressed in a large number of randomly generated bases and AlphaTensor plays games in all bases in parallel.
 * Modular arithmetic: Agents are trained using either standard arithmetic or [modular arithmetic][modular].
