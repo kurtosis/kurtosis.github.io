@@ -25,9 +25,7 @@ To illustrate (1), try calculating each of the following in your head:
 <center> $$15047 \times 30821$$ </center>
 It should be clear that multiplication is more work!
 
-<!-- (you might even be able to do the addition in your head, but for the multiplication this would require a strong memory!). -->
-More precisely, consider two integers, each of $$n$$ digits (or bits). Using standard "pencil-and-paper" methods, the time complexity of adding them is $$O(n)$$ - we first add the digits in the ones place and carry, then those in the tens place, etc. The time complexity of multiplying them is $$O(n^2)$$ - we multiply the ones digit of the first number by every digit in the second number, then do the same for the tens digit, etc. Alternatively, if we denote the value of an integer as $$N$$ then addition is $$O(log(N))$$ and multiplication is $$O(log^2(N))$$. The key point is that the complexity of standard multiplication scales as the square of the complexity of addition. (In truth, faster [multiplication algorithms][arithmetic-complexity] exist which are $$O(n \space log(n))$$, still slower than addition.)
-<!-- This holds whether the numbers are of different magnitudes, are expressed in bits rather than base 10, or are floating point rather than integers. -->
+More precisely, consider two integers, each of $$n$$ digits (or bits). Using standard "pencil-and-paper" methods, the time complexity of adding them is $$O(n)$$ - we first add the digits in the ones place and carry, then those in the tens place, etc. The time complexity of multiplying them is $$O(n^2)$$ - we multiply the ones digit of the first number by every digit in the second number, then do the same for the tens digit, etc. Alternatively, if we denote the value of an integer as $$N$$ then addition is $$O(log(N))$$ and multiplication is $$O(log^2(N))$$. The key point is that the complexity of standard multiplication scales as the square of the complexity of addition. (However, faster [multiplication algorithms][arithmetic-complexity] exist which are $$O(n \space log(n))$$, still slower than addition.)
 
 To illustrate (2), consider the example (courtesy of [Assembly AI][assembly-ai]) of computing the difference of two squares, $$a^2 - b^2$$. Both of these algorithms produce the correct result:
 
@@ -194,7 +192,7 @@ This is an upper-confidence tree bound - it favors actions which have a high val
 
 Each time the tree is extended we do a backward pass ([code][code-backward-pass]) in which $$N(s,a)$$ and $$Q(s,a)$$ are updated for all nodes along the simulated trajectory.
 
-DeepMind's MCTS procedure uses $$n_{samples}=32$$ and $$n_{sim}=800$$, producing trees with up to 25,600 nodes. Given the enormous action space, this is a pretty small subset of the full game tree!
+DeepMind's MCTS procedure uses $$n_{samples}=32$$ and $$n_{sim}=800$$, producing trees with up to 25,600 nodes. Given the enormous action space (up to $$10^{12}$$ actions), this is a very small subset of the full game tree!
 
 ### Policy Improvement
 
