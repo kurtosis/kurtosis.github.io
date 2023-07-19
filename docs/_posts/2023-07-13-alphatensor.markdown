@@ -57,7 +57,6 @@ Each element of the product requires two multiplications, resulting in eight mul
 ![](/assets/images/strassen_algo.png){: width="200"}
 
 That's a surprising result! But it probably also comes across as a clever one-off trick - it does not immediately suggest any structured approach to finding efficient algorithms for larger matrices. Can we do any better than blind trial-and-error or simple heuristics? We can! AlphaTensor is rooted in two observations which allow us to reframe this challenge as a problem of efficiently searching a [game tree][game-tree].
-<!-- In general, the standard way of multipling matrices of sizes $$(n \times m)$$ and $$(m \times p)$$, requires $$(n \times p) \times m$$ scalar multiplications. It turns out that for most cases which have been examined, it is possible to perform the operation with substantially fewer scalar multiplications. For example, the AlphaTensor paper reported that the case $$(n=4, m=5, p=5)$$ can be computed with 76 multiplications rather than 100. -->
 
 ### Matrix Multiplication can be Expressed as a Tensor
 
@@ -97,12 +96,12 @@ $$s_{ijk} \leftarrow s_{ijk} + u_iv_jw_k$$
 
 After doing this for all seven columns we end up with $$\mathcal{S}=\mathcal{T}$$. Thus we can reframe the problem as a single player game whose goal is to find a sequence of actions which produces a low-rank decomposition of $$\mathcal{T}$$. (In practice, we set the initial state as $$\mathcal{S}=\mathcal{T}$$ and subtract $$u_iv_jw_k$$ at each step, so that the target state is always $$\mathcal{S}=0$$.) This is referred to as TensorGame and AlphaTensor is a method for learning to play this game.
 
-The table below shows the best results discovered by AlphaTensor for multiplication of various matrix sizes. Each row shows the number of steps (or rank) needed to multiply matrices of sizes $$n \times m$$ and $$m \times p$$. In each case, AlphaTensor was able to match or surpass the current best known algorithm - the paper even reports improvements up to size $$(11, 12, 12)$$. To be clear, the results themselves are not a major improvement in computational efficiency. Rather what is most impressive is that AlphaTensor demonstrates a promising method for searching extremely large combinatorial spaces which can be applied to many problems.
+The table below shows the best results discovered by AlphaTensor for multiplication of various matrix sizes. Each row shows the number of actions (or rank) needed to multiply matrices of sizes $$n \times m$$ and $$m \times p$$. In each case, AlphaTensor was able to match or surpass the current best known algorithm - the paper even reports improvements up to size $$(11, 12, 12)$$. To be clear, the results themselves are not a groundbreaking improvement in computational efficiency. Rather, what is most impressive is that AlphaTensor demonstrates a promising method for searching extremely large combinatorial spaces which can be applied to many problems.
 
 ![](/assets/images/best_ranks.png){: width="400"}
 
 The approach of AlphaTensor is broadly as follows:
-1. Build a model to choose an action $$( {\bf u,  v,  w})$$, and estimate a value $$Q$$, given a state $$\mathcal{S}$$.
+1. Build a model to choose an action $$( {\bf u,  v,  w})$$ and estimate a state-value $$Q$$, given a state $$\mathcal{S}$$.
 2. Define a sufficiently dense reward function to provide feedback to the model.
 3. Use a RL algorithm to explore the game tree for low-rank decompositions, guided by the model's policy and value outputs.
 4. Supplement the RL problem with a supervised learning problem on known decompositions.
@@ -111,11 +110,11 @@ In the rest of this post I'll walk through the details of AlphaTensor. I'll star
 
 ## Reward function
 
-Since the goal is to minimize the number of actions to reach a target state, AlphaTensor provides a reward of $$-1$$ for each action taken. Games are terminated when the target state is reached or after a finite number $$(R_{limit})$$ of steps. If $$\mathcal{S}$$ is still non-zero at this point, an additional reward of $$-\gamma(\mathcal{S})$$ is given, equal to "an upper bound on the rank of the terminal tensor" ([code][code-terminal-reward]). In simpler terms, $$\gamma(\mathcal{S})$$ is roughly the number of non-zero entries remaining in $$\mathcal{S}$$ - we know that each of these could be eliminated by a single action. Note that this terminal reward plays an important role in creating a dense reward function. Without it, the agent would only recieve useful feedback when it reaches the target state within $$R_{limit}$$ steps - which is effectively a sparse reward.
+Since the goal is to minimize the number of actions to reach a target state, AlphaTensor provides a reward of $$-1$$ for each action taken. Games are terminated when the target state is reached or after a finite number $$(R_{limit})$$ of steps. If $$\mathcal{S}$$ is still non-zero at this point, an additional reward of $$-\gamma(\mathcal{S})$$ is given, equal to "an upper bound on the rank of the terminal tensor" ([code][code-terminal-reward]). In simpler terms, $$\gamma(\mathcal{S})$$ is roughly the number of non-zero entries remaining in $$\mathcal{S}$$ - we know that each of these could be eliminated by a single action. Note that this terminal reward plays an important role in creating a dense reward function. Without it, the agent would only receive useful feedback when it reaches the target state within $$R_{limit}$$ steps - which is effectively a sparse reward.
 
 ## Supervised learning
 
-While tensor decomposition is NP-hard, it is straightfoward to do the inverse: to construct a tensor $$\mathcal{D}$$ from a given set of factors $$\{({\bf u}^{(r)}, {\bf v}^{(r)}, {\bf w}^{(r)})\}^R_{r=1}$$. This suggests a way to create synthetic demonstrations for supervised training - a set of factors is sampled from some distribution, and the resulting tensor $$\mathcal{D}$$ is given as an initial condition to the network, which is then trained to output the correct factors ([code][code-synth-demos]). AlphaTensor generates a large dataset of such demonstrations and uses a mixed training strategy, alternating between training on supervised loss on the demonstrations and reinforcement learning loss (learning to decompose $$\mathcal{T}$$). This was found to substantially outperform either strategy separately.
+While tensor decomposition is NP-hard, it is straightforward to do the inverse: to construct a tensor $$\mathcal{D}$$ from a given set of factors $$\{({\bf u}^{(r)}, {\bf v}^{(r)}, {\bf w}^{(r)})\}^R_{r=1}$$. This suggests a way to create synthetic demonstrations for supervised training - a set of factors is sampled from some distribution, and the resulting tensor $$\mathcal{D}$$ is given as an initial condition to the network, which is then trained to output the correct factors ([code][code-synth-demos]). AlphaTensor generates a large dataset of such demonstrations and uses a mixed training strategy, alternating between training on supervised loss on the demonstrations and reinforcement learning loss (learning to decompose $$\mathcal{T}$$). This was found to substantially outperform either strategy separately.
 
 
 ## Network Architecture and Training
@@ -125,7 +124,7 @@ The AlphaTensor network consists of three components:
 2. A policy head ([code][code-policy]), which takes the embedding produced by the torso and generates a distribution over candidate actions.
 3. A value head ([code][code-value]), which takes the embedding produced by the torso and generates a distribution of expected returns.
 
-In the rest of this secion I'll give a brief overview of the architecture with links to my implementation. The network is quite complex (particularly the torso) and I won't attempt to cover all the details - to fully understand it I recommend both the paper and the pseudocode provided in the [Supplementary Information][alphatensor-supplementary].
+In the rest of this section I'll give a brief overview of the architecture with links to my implementation. The network is quite complex (particularly the torso) and I won't attempt to cover all the details - to fully understand it I recommend both the paper and the pseudocode provided in the [Supplementary Information][alphatensor-supplementary].
 
 ![](/assets/images/network_architecture.png){: width="600"}
 
@@ -187,7 +186,7 @@ where
 * $$\hat{\pi}(s,a)$$ - empirical policy, the fraction of sampled actions from $$s$$ that were equal to $$a$$.
 * $$c(s)$$ an exploration factor to balance the two terms (essentially a hyperparameter)
 
-This is an upper-confidence tree bound - it favors actions which have a high value but have not been expored frequently and have a high empirical policy probability.
+This is an upper-confidence tree bound - it favors actions which have a high value but have not been explored frequently and have a high empirical policy probability.
 
 
 Each time the tree is extended we do a backward pass ([code][code-backward-pass]) in which $$N(s,a)$$ and $$Q(s,a)$$ are updated for all nodes along the simulated trajectory.
