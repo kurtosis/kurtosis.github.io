@@ -6,6 +6,9 @@ categories: alphatensor
 usemathjax: true
 ---
 
+* TOC
+{:toc}
+
 DeepMind's AlphaTensor  ([blog][alphatensor-blog], [paper][alphatensor-nature]), introduced in October 2022, uses deep reinforcement learning to discover efficient algorithms for matrix multiplication. It has, perhaps understandably, not received the same level of attention as recent advances in generative AI. However, there are a few aspects of this work which make it a particularly interesting development in deep learning:
 * The complexity of the problem is rooted in its fundamental mathematical structure, not in extracting information from large empirical (i.e. social or physical) data sets such as text, image, or omics data.
 * The action space is much larger ($$10^{10}\times$$ larger!) than that of games like chess and Go, making it extremely challenging to search the game tree efficiently. The number of algorithms discovered demonstrates that this area is far richer than was previously understood.
@@ -58,7 +61,7 @@ Each element of the product requires two multiplications, resulting in eight mul
 
 That's a surprising result! But it probably also comes across as a clever one-off trick - it does not immediately suggest any structured approach to finding efficient algorithms for larger matrices. Can we do any better than blind trial-and-error or simple heuristics? We can! AlphaTensor is rooted in two observations which allow us to reframe this challenge as a problem of efficiently searching a [game tree][game-tree].
 
-### Matrix Multiplication can be Expressed as a Tensor
+## Matrix Multiplication can be Expressed as a Tensor
 
 We can describe the multiplication $$C=AB$$ by a three-dimensional tensor $$\mathcal{T}$$ where the element $$t_{ijk}$$ denotes the contribution of $$a_ib_j$$ to $$c_k$$.
 
@@ -77,7 +80,7 @@ and similarly for $$c_2$$, $$c_3$$, and $$c_4$$.
 
 
 
-### Matrix Multiplication Algorithms are Tensor Decompositions
+## Matrix Multiplication Algorithms are Tensor Decompositions
 
 Strassen's algorithm can be described as performing a sequence of actions, each of which has four parts:
 1. Compute $$u$$, a linear combination of elements of $$A$$. (highlighted in green above)
@@ -99,6 +102,8 @@ After doing this for all seven columns we end up with $$\mathcal{S}=\mathcal{T}$
 The table below shows the best results discovered by AlphaTensor for multiplication of various matrix sizes. Each row shows the number of actions (or rank) needed to multiply matrices of sizes $$n \times m$$ and $$m \times p$$. In each case, AlphaTensor was able to match or surpass the current best known algorithm - the paper even reports improvements up to size $$(11, 12, 12)$$. To be clear, the results themselves are not a groundbreaking improvement in computational efficiency. Rather, what is most impressive is that AlphaTensor demonstrates a promising method for searching extremely large combinatorial spaces which can be applied to many problems.
 
 ![](/assets/images/best_ranks.png){: width="400"}
+
+# Implementing AlphaTensor
 
 The approach of AlphaTensor is broadly as follows:
 1. Build a model to choose an action $$( {\bf u,  v,  w})$$ and estimate a state-value $$Q$$, given a state $$\mathcal{S}$$.
@@ -205,7 +210,7 @@ $$\mathcal{I}\hat{\pi}(s,a) = \dfrac{[N(s,a)]^{1/\tau(s)}}{\sum_b{[N(s,b)]^{1/\t
 
 where $$\tau(s)=\text{log }N(s)/\text{log }\bar{N}$$ if $$N(s)>\bar{N}$$, else $$1$$.
 
-# Additional Details
+## Additional Details
 
 The AlphaTensor paper includes some additional details which I did not implement. For completeness I mention them here:
 * Change of basis: $$\mathcal{T}$$ is expressed in a large number of randomly generated bases and AlphaTensor plays games in all bases in parallel.

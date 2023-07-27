@@ -1,4 +1,30 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.3.2">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2023-07-16T16:13:41-04:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Kurt Smith</title><subtitle>Writeups of my side projects.</subtitle><entry><title type="html">Breaking Down DeepMind’s AlphaTensor</title><link href="http://localhost:4000/alphatensor/2023/07/13/alphatensor.html" rel="alternate" type="text/html" title="Breaking Down DeepMind’s AlphaTensor" /><published>2023-07-13T00:00:00-04:00</published><updated>2023-07-13T00:00:00-04:00</updated><id>http://localhost:4000/alphatensor/2023/07/13/alphatensor</id><content type="html" xml:base="http://localhost:4000/alphatensor/2023/07/13/alphatensor.html"><![CDATA[<p>DeepMind’s AlphaTensor  (<a href="https://www.deepmind.com/blog/discovering-novel-algorithms-with-alphatensor">blog</a>, <a href="https://www.nature.com/articles/s41586-022-05172-4">paper</a>), introduced in October 2022, uses deep reinforcement learning to discover efficient algorithms for matrix multiplication. It has, perhaps understandably, not received the same level of attention as recent advances in generative AI. However, there are a few aspects of this work which make it a particularly interesting development in deep learning:</p>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.3.2">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2023-07-27T12:14:45-04:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Kurt Smith</title><subtitle>Writeups of my side projects.</subtitle><entry><title type="html">Breaking Down DeepMind’s AlphaTensor</title><link href="http://localhost:4000/alphatensor/2023/07/13/alphatensor.html" rel="alternate" type="text/html" title="Breaking Down DeepMind’s AlphaTensor" /><published>2023-07-13T00:00:00-04:00</published><updated>2023-07-13T00:00:00-04:00</updated><id>http://localhost:4000/alphatensor/2023/07/13/alphatensor</id><content type="html" xml:base="http://localhost:4000/alphatensor/2023/07/13/alphatensor.html"><![CDATA[<ul id="markdown-toc">
+  <li><a href="#doing-arithmetic-efficiently" id="markdown-toc-doing-arithmetic-efficiently">Doing Arithmetic Efficiently</a>    <ul>
+      <li><a href="#matrix-multiplication" id="markdown-toc-matrix-multiplication">Matrix Multiplication</a></li>
+      <li><a href="#matrix-multiplication-can-be-expressed-as-a-tensor" id="markdown-toc-matrix-multiplication-can-be-expressed-as-a-tensor">Matrix Multiplication can be Expressed as a Tensor</a></li>
+      <li><a href="#matrix-multiplication-algorithms-are-tensor-decompositions" id="markdown-toc-matrix-multiplication-algorithms-are-tensor-decompositions">Matrix Multiplication Algorithms are Tensor Decompositions</a></li>
+    </ul>
+  </li>
+  <li><a href="#implementing-alphatensor" id="markdown-toc-implementing-alphatensor">Implementing AlphaTensor</a>    <ul>
+      <li><a href="#reward-function" id="markdown-toc-reward-function">Reward function</a></li>
+      <li><a href="#supervised-learning" id="markdown-toc-supervised-learning">Supervised learning</a></li>
+      <li><a href="#network-architecture-and-training" id="markdown-toc-network-architecture-and-training">Network Architecture and Training</a>        <ul>
+          <li><a href="#training-process" id="markdown-toc-training-process">Training Process</a></li>
+          <li><a href="#torso" id="markdown-toc-torso">Torso</a></li>
+          <li><a href="#policy-head" id="markdown-toc-policy-head">Policy Head</a></li>
+          <li><a href="#value-head" id="markdown-toc-value-head">Value Head</a></li>
+        </ul>
+      </li>
+      <li><a href="#monte-carlo-tree-search" id="markdown-toc-monte-carlo-tree-search">Monte Carlo Tree Search</a>        <ul>
+          <li><a href="#policy-improvement" id="markdown-toc-policy-improvement">Policy Improvement</a></li>
+        </ul>
+      </li>
+      <li><a href="#additional-details" id="markdown-toc-additional-details">Additional Details</a></li>
+    </ul>
+  </li>
+</ul>
+
+<p>DeepMind’s AlphaTensor  (<a href="https://www.deepmind.com/blog/discovering-novel-algorithms-with-alphatensor">blog</a>, <a href="https://www.nature.com/articles/s41586-022-05172-4">paper</a>), introduced in October 2022, uses deep reinforcement learning to discover efficient algorithms for matrix multiplication. It has, perhaps understandably, not received the same level of attention as recent advances in generative AI. However, there are a few aspects of this work which make it a particularly interesting development in deep learning:</p>
 <ul>
   <li>The complexity of the problem is rooted in its fundamental mathematical structure, not in extracting information from large empirical (i.e. social or physical) data sets such as text, image, or omics data.</li>
   <li>The action space is much larger (\(10^{10}\times\) larger!) than that of games like chess and Go, making it extremely challenging to search the game tree efficiently. The number of algorithms discovered demonstrates that this area is far richer than was previously understood.</li>
@@ -50,10 +76,9 @@ return \(d_1 \cdot d_2\)</p>
 
 <p><img src="/assets/images/strassen_algo.png" alt="" width="200" /></p>
 
-<p>That’s a surprising result! But it probably also comes across as a clever one-off trick - it does not immediately suggest any structured approach to finding efficient algorithms for larger matrices. Can we do any better than blind trial-and-error or simple heuristics? We can! AlphaTensor is rooted in two observations which allow us to reframe this challenge as a problem of efficiently searching a <a href="https://en.wikipedia.org/wiki/Game_tree">game tree</a>.
-<!-- In general, the standard way of multipling matrices of sizes $$(n \times m)$$ and $$(m \times p)$$, requires $$(n \times p) \times m$$ scalar multiplications. It turns out that for most cases which have been examined, it is possible to perform the operation with substantially fewer scalar multiplications. For example, the AlphaTensor paper reported that the case $$(n=4, m=5, p=5)$$ can be computed with 76 multiplications rather than 100. --></p>
+<p>That’s a surprising result! But it probably also comes across as a clever one-off trick - it does not immediately suggest any structured approach to finding efficient algorithms for larger matrices. Can we do any better than blind trial-and-error or simple heuristics? We can! AlphaTensor is rooted in two observations which allow us to reframe this challenge as a problem of efficiently searching a <a href="https://en.wikipedia.org/wiki/Game_tree">game tree</a>.</p>
 
-<h3 id="matrix-multiplication-can-be-expressed-as-a-tensor">Matrix Multiplication can be Expressed as a Tensor</h3>
+<h2 id="matrix-multiplication-can-be-expressed-as-a-tensor">Matrix Multiplication can be Expressed as a Tensor</h2>
 
 <p>We can describe the multiplication \(C=AB\) by a three-dimensional tensor \(\mathcal{T}\) where the element \(t_{ijk}\) denotes the contribution of \(a_ib_j\) to \(c_k\).</p>
 
@@ -70,7 +95,7 @@ return \(d_1 \cdot d_2\)</p>
 \(t_{ij1} = 0 \space \forall \space \text{other} \space (i, j)\)<br />
 and similarly for \(c_2\), \(c_3\), and \(c_4\).</p>
 
-<h3 id="matrix-multiplication-algorithms-are-tensor-decompositions">Matrix Multiplication Algorithms are Tensor Decompositions</h3>
+<h2 id="matrix-multiplication-algorithms-are-tensor-decompositions">Matrix Multiplication Algorithms are Tensor Decompositions</h2>
 
 <p>Strassen’s algorithm can be described as performing a sequence of actions, each of which has four parts:</p>
 <ol>
@@ -90,13 +115,15 @@ and similarly for \(c_2\), \(c_3\), and \(c_4\).</p>
 
 <p>After doing this for all seven columns we end up with \(\mathcal{S}=\mathcal{T}\). Thus we can reframe the problem as a single player game whose goal is to find a sequence of actions which produces a low-rank decomposition of \(\mathcal{T}\). (In practice, we set the initial state as \(\mathcal{S}=\mathcal{T}\) and subtract \(u_iv_jw_k\) at each step, so that the target state is always \(\mathcal{S}=0\).) This is referred to as TensorGame and AlphaTensor is a method for learning to play this game.</p>
 
-<p>The table below shows the best results discovered by AlphaTensor for multiplication of various matrix sizes. Each row shows the number of steps (or rank) needed to multiply matrices of sizes \(n \times m\) and \(m \times p\). In each case, AlphaTensor was able to match or surpass the current best known algorithm - the paper even reports improvements up to size \((11, 12, 12)\). To be clear, the results themselves are not a major improvement in computational efficiency. Rather what is most impressive is that AlphaTensor demonstrates a promising method for searching extremely large combinatorial spaces which can be applied to many problems.</p>
+<p>The table below shows the best results discovered by AlphaTensor for multiplication of various matrix sizes. Each row shows the number of actions (or rank) needed to multiply matrices of sizes \(n \times m\) and \(m \times p\). In each case, AlphaTensor was able to match or surpass the current best known algorithm - the paper even reports improvements up to size \((11, 12, 12)\). To be clear, the results themselves are not a groundbreaking improvement in computational efficiency. Rather, what is most impressive is that AlphaTensor demonstrates a promising method for searching extremely large combinatorial spaces which can be applied to many problems.</p>
 
 <p><img src="/assets/images/best_ranks.png" alt="" width="400" /></p>
 
+<h1 id="implementing-alphatensor">Implementing AlphaTensor</h1>
+
 <p>The approach of AlphaTensor is broadly as follows:</p>
 <ol>
-  <li>Build a model to choose an action \(( {\bf u,  v,  w})\), and estimate a value \(Q\), given a state \(\mathcal{S}\).</li>
+  <li>Build a model to choose an action \(( {\bf u,  v,  w})\) and estimate a state-value \(Q\), given a state \(\mathcal{S}\).</li>
   <li>Define a sufficiently dense reward function to provide feedback to the model.</li>
   <li>Use a RL algorithm to explore the game tree for low-rank decompositions, guided by the model’s policy and value outputs.</li>
   <li>Supplement the RL problem with a supervised learning problem on known decompositions.</li>
@@ -106,11 +133,11 @@ and similarly for \(c_2\), \(c_3\), and \(c_4\).</p>
 
 <h2 id="reward-function">Reward function</h2>
 
-<p>Since the goal is to minimize the number of actions to reach a target state, AlphaTensor provides a reward of \(-1\) for each action taken. Games are terminated when the target state is reached or after a finite number \((R_{limit})\) of steps. If \(\mathcal{S}\) is still non-zero at this point, an additional reward of \(-\gamma(\mathcal{S})\) is given, equal to “an upper bound on the rank of the terminal tensor” (<a href="https://github.com/kurtosis/mat_mul/blob/2ad32d231fc2d82e9ffc66a660b60581e5458bfc/act.py#L59">code</a>). In simpler terms, \(\gamma(\mathcal{S})\) is roughly the number of non-zero entries remaining in \(\mathcal{S}\) - we know that each of these could be eliminated by a single action. Note that this terminal reward plays an important role in creating a dense reward function. Without it, the agent would only recieve useful feedback when it reaches the target state within \(R_{limit}\) steps - which is effectively a sparse reward.</p>
+<p>Since the goal is to minimize the number of actions to reach a target state, AlphaTensor provides a reward of \(-1\) for each action taken. Games are terminated when the target state is reached or after a finite number \((R_{limit})\) of steps. If \(\mathcal{S}\) is still non-zero at this point, an additional reward of \(-\gamma(\mathcal{S})\) is given, equal to “an upper bound on the rank of the terminal tensor” (<a href="https://github.com/kurtosis/mat_mul/blob/2ad32d231fc2d82e9ffc66a660b60581e5458bfc/act.py#L59">code</a>). In simpler terms, \(\gamma(\mathcal{S})\) is roughly the number of non-zero entries remaining in \(\mathcal{S}\) - we know that each of these could be eliminated by a single action. Note that this terminal reward plays an important role in creating a dense reward function. Without it, the agent would only receive useful feedback when it reaches the target state within \(R_{limit}\) steps - which is effectively a sparse reward.</p>
 
 <h2 id="supervised-learning">Supervised learning</h2>
 
-<p>While tensor decomposition is NP-hard, it is straightfoward to do the inverse: to construct a tensor \(\mathcal{D}\) from a given set of factors \(\{({\bf u}^{(r)}, {\bf v}^{(r)}, {\bf w}^{(r)})\}^R_{r=1}\). This suggests a way to create synthetic demonstrations for supervised training - a set of factors is sampled from some distribution, and the resulting tensor \(\mathcal{D}\) is given as an initial condition to the network, which is then trained to output the correct factors (<a href="https://github.com/kurtosis/mat_mul/blob/2ad32d231fc2d82e9ffc66a660b60581e5458bfc/datasets.py#L20">code</a>). AlphaTensor generates a large dataset of such demonstrations and uses a mixed training strategy, alternating between training on supervised loss on the demonstrations and reinforcement learning loss (learning to decompose \(\mathcal{T}\)). This was found to substantially outperform either strategy separately.</p>
+<p>While tensor decomposition is NP-hard, it is straightforward to do the inverse: to construct a tensor \(\mathcal{D}\) from a given set of factors \(\{({\bf u}^{(r)}, {\bf v}^{(r)}, {\bf w}^{(r)})\}^R_{r=1}\). This suggests a way to create synthetic demonstrations for supervised training - a set of factors is sampled from some distribution, and the resulting tensor \(\mathcal{D}\) is given as an initial condition to the network, which is then trained to output the correct factors (<a href="https://github.com/kurtosis/mat_mul/blob/2ad32d231fc2d82e9ffc66a660b60581e5458bfc/datasets.py#L20">code</a>). AlphaTensor generates a large dataset of such demonstrations and uses a mixed training strategy, alternating between training on supervised loss on the demonstrations and reinforcement learning loss (learning to decompose \(\mathcal{T}\)). This was found to substantially outperform either strategy separately.</p>
 
 <h2 id="network-architecture-and-training">Network Architecture and Training</h2>
 
@@ -121,7 +148,7 @@ and similarly for \(c_2\), \(c_3\), and \(c_4\).</p>
   <li>A value head (<a href="https://github.com/kurtosis/mat_mul/blob/2ad32d231fc2d82e9ffc66a660b60581e5458bfc/model.py#L266">code</a>), which takes the embedding produced by the torso and generates a distribution of expected returns.</li>
 </ol>
 
-<p>In the rest of this secion I’ll give a brief overview of the architecture with links to my implementation. The network is quite complex (particularly the torso) and I won’t attempt to cover all the details - to fully understand it I recommend both the paper and the pseudocode provided in the <a href="https://static-content.springer.com/esm/art%3A10.1038%2Fs41586-022-05172-4/MediaObjects/41586_2022_5172_MOESM1_ESM.pdf">Supplementary Information</a>.</p>
+<p>In the rest of this section I’ll give a brief overview of the architecture with links to my implementation. The network is quite complex (particularly the torso) and I won’t attempt to cover all the details - to fully understand it I recommend both the paper and the pseudocode provided in the <a href="https://static-content.springer.com/esm/art%3A10.1038%2Fs41586-022-05172-4/MediaObjects/41586_2022_5172_MOESM1_ESM.pdf">Supplementary Information</a>.</p>
 
 <p><img src="/assets/images/network_architecture.png" alt="" width="600" /></p>
 
@@ -184,7 +211,7 @@ and similarly for \(c_2\), \(c_3\), and \(c_4\).</p>
   <li>\(c(s)\) an exploration factor to balance the two terms (essentially a hyperparameter)</li>
 </ul>
 
-<p>This is an upper-confidence tree bound - it favors actions which have a high value but have not been expored frequently and have a high empirical policy probability.</p>
+<p>This is an upper-confidence tree bound - it favors actions which have a high value but have not been explored frequently and have a high empirical policy probability.</p>
 
 <p>Each time the tree is extended we do a backward pass (<a href="https://github.com/kurtosis/mat_mul/blob/2ad32d231fc2d82e9ffc66a660b60581e5458bfc/act.py#L219">code</a>) in which \(N(s,a)\) and \(Q(s,a)\) are updated for all nodes along the simulated trajectory.</p>
 
@@ -202,11 +229,11 @@ and similarly for \(c_2\), \(c_3\), and \(c_4\).</p>
 
 <p>where \(\tau(s)=\text{log }N(s)/\text{log }\bar{N}\) if \(N(s)&gt;\bar{N}\), else \(1\).</p>
 
-<h1 id="additional-details">Additional Details</h1>
+<h2 id="additional-details">Additional Details</h2>
 
 <p>The AlphaTensor paper includes some additional details which I did not implement. For completeness I mention them here:</p>
 <ul>
   <li>Change of basis: \(\mathcal{T}\) is expressed in a large number of randomly generated bases and AlphaTensor plays games in all bases in parallel.</li>
   <li>Modular arithmetic: Agents are trained using either standard arithmetic or <a href="https://en.wikipedia.org/wiki/Modular_arithmetic">modular arithmetic</a>.</li>
   <li>Multiple target tensors: A single agent is trained to decompose tensors of different sizes. Since the network takes fixed-size inputs, smaller tensors are padded with zeros.</li>
-</ul>]]></content><author><name></name></author><category term="alphatensor" /><summary type="html"><![CDATA[DeepMind’s AlphaTensor (blog, paper), introduced in October 2022, uses deep reinforcement learning to discover efficient algorithms for matrix multiplication. It has, perhaps understandably, not received the same level of attention as recent advances in generative AI. However, there are a few aspects of this work which make it a particularly interesting development in deep learning: The complexity of the problem is rooted in its fundamental mathematical structure, not in extracting information from large empirical (i.e. social or physical) data sets such as text, image, or omics data. The action space is much larger (\(10^{10}\times\) larger!) than that of games like chess and Go, making it extremely challenging to search the game tree efficiently. The number of algorithms discovered demonstrates that this area is far richer than was previously understood. AlphaTensor combines multiple state-of-the-art techniques to tackle the problem, including a transformer network to select actions from a high dimensional, discrete space and Monte Carlo tree search (MCTS) to solve the reinforcement learning problem.]]></summary></entry></feed>
+</ul>]]></content><author><name></name></author><category term="alphatensor" /></entry></feed>
