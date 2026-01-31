@@ -1,4 +1,186 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.3.2">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2023-07-27T12:14:45-04:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Kurt Smith</title><subtitle>Writeups of my side projects.</subtitle><entry><title type="html">Breaking Down DeepMind’s AlphaTensor</title><link href="http://localhost:4000/alphatensor/2023/07/13/alphatensor.html" rel="alternate" type="text/html" title="Breaking Down DeepMind’s AlphaTensor" /><published>2023-07-13T00:00:00-04:00</published><updated>2023-07-13T00:00:00-04:00</updated><id>http://localhost:4000/alphatensor/2023/07/13/alphatensor</id><content type="html" xml:base="http://localhost:4000/alphatensor/2023/07/13/alphatensor.html"><![CDATA[<ul id="markdown-toc">
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.3.2">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2026-01-31T14:11:31-08:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Kurt Smith</title><subtitle>Writeups of my side projects.</subtitle><entry><title type="html">Scaling Laws for Pass@k and Temperature</title><link href="http://localhost:4000/scaling/2025/06/01/pass_at_k_scaling.html" rel="alternate" type="text/html" title="Scaling Laws for Pass@k and Temperature" /><published>2025-06-01T00:00:00-07:00</published><updated>2025-06-01T00:00:00-07:00</updated><id>http://localhost:4000/scaling/2025/06/01/pass_at_k_scaling</id><content type="html" xml:base="http://localhost:4000/scaling/2025/06/01/pass_at_k_scaling.html"><![CDATA[<ul id="markdown-toc">
+  <li><a href="#summary" id="markdown-toc-summary">Summary</a></li>
+  <li><a href="#overview--motivation" id="markdown-toc-overview--motivation">Overview / Motivation</a></li>
+  <li><a href="#toy-model" id="markdown-toc-toy-model">Toy Model</a></li>
+  <li><a href="#results" id="markdown-toc-results">Results</a>    <ul>
+      <li><a href="#how-does-the-optimal-t-for-an-eval-set-scale-with-k" id="markdown-toc-how-does-the-optimal-t-for-an-eval-set-scale-with-k"><em>How does the optimal \(T\) for an eval set scale with k?</em></a>        <ul>
+          <li><a href="#normally-distributed-task-difficulty" id="markdown-toc-normally-distributed-task-difficulty">Normally Distributed Task Difficulty</a></li>
+          <li><a href="#exponentially-distributed-task-difficulty" id="markdown-toc-exponentially-distributed-task-difficulty">Exponentially Distributed Task Difficulty</a></li>
+          <li><a href="#power-law-distributed-task-difficulty" id="markdown-toc-power-law-distributed-task-difficulty">Power Law Distributed Task Difficulty</a></li>
+          <li><a href="#comparing-all-three-task-distributions" id="markdown-toc-comparing-all-three-task-distributions">Comparing all three task distributions</a></li>
+        </ul>
+      </li>
+      <li><a href="#deciding-how-large-to-make-k" id="markdown-toc-deciding-how-large-to-make-k">Deciding how large to make k</a></li>
+    </ul>
+  </li>
+</ul>
+
+<h1 id="summary">Summary</h1>
+
+<ul>
+  <li>\(pass@k\) is a complicated metric to reason about because it has a nonlinear dependence on \(k\) and temperature (\(T\)), which cannot easily be factored into independent dependences on \(k\) and \(T\).</li>
+  <li>The optimal temperature \(T^*\) (that which maximizes \(\mathbb{E}[\text{pass@k}]\)) depends on \(k\). I present results from a toy model showing that \(T^*(k)\) follows a power law over several decades of \(k\).
+    <ul>
+      <li>Crucially, this behavior occurs because eval sets contain tasks of varying difficulties. We do not see it if we evaluate only a single task. (A “difficult task”” being defined as one with a low \(pass@1\).)</li>
+      <li>As \(k \rightarrow \infty\) there is an asymptotic upper bound on \(T^*\) that depends only on the single most difficult task in the eval set. (Theoretically, if we had an infinite eval set with no single “hardest” task then the \(T^*(k)\) power law scaling would continue as  \(k \rightarrow \infty\) because there would always be harder tasks to pass.)</li>
+    </ul>
+  </li>
+  <li>
+    <p>However, <strong>the \(T^*(k)\)  power law also depends on the details of the eval set, specifically the tail of the distribution of task difficulty</strong>. The two plots below show \(T^*(k)\) curves for increasingly fat-tailed families of eval distributions (Gaussian &lt; exponential &lt; power law). For more fat-tailed distributions, one should increase \(T\) significantly more as \(k\) increases. Note that this is true even when comparing distributions with the same mean and variance - it is only due to the shape of the tail.</p>
+
+    <table>
+  <tr>
+    <td><img src="/assets/images_2025-06-01/image.png" width="300" /></td>
+    <td><img src="/assets/images_2025-06-01/image_1.png" width="300" /></td>
+  </tr>
+  <tr>
+    <td><img src="/assets/images_2025-06-01/image_2.png" width="300" /></td>
+    <td><img src="/assets/images_2025-06-01/image_3.png" width="300" /></td>
+  </tr>
+</table>
+  </li>
+</ul>
+
+<h1 id="overview--motivation">Overview / Motivation</h1>
+
+<p>\(pass@k\) is a widely used metric for AI benchmarks where i) model output is open-ended  with many possible formulations of a “correct” generation and ii) it is feasible to automatically verify solutions at scale. Code is one prominent domain where this is the case, and formal proofs are another (using Lean for verification). This class of benchmarks is distinct from benchmarks where valid answers must come from a limited set (e.g. multiple choice or math benchmarks where the answer must be an integer between 0 and 999) or short-form knowledge benchmarks, where there is unlikely to be much variation in correct responses (e.g. “What is the capital of France”?)</p>
+
+<p>For these simpler benchmarks, \(accuracy\) (which I define here as \(pass@1\) for \(T=0\)) and \(perplexity\) (of a correct reference solution) may be sufficient metrics to estimate model capabilities. However they have shortcomings on open-ended benchmarks:</p>
+
+<ol>
+  <li>Accuracy is a binary variable for each task. For challenging benchmarks (or weak models) the average value may be very low (even zero), meaning that it is less sensitive to model improvements and has wide confidence intervals. By contrast, \(\mathbb{E}[\text{pass@k}]\) is continuous-valued  for each task, increases with \(k\), and can be estimated to arbitrarily high precision by producing \(n &gt; k\) generations.</li>
+  <li>Perplexity is calculated on one (or at best, a few) reference solutions. Any coding task has a large number of correct solutions, due to trivial style variations (such as variable names), and possibly more significant algorithmic variations as well. During training, a model may learn to solve a task in a particular way which is not well reflected in the reference solution (imagine a model that always uses snake case while the provided solutions are in camel case).</li>
+</ol>
+
+<p>\(pass@k\) would seem to be the most useful metric to estimate performance (and track improvement) on open-ended, verifiable tasks. However, it brings some distinct challenges:</p>
+
+<ol>
+  <li><strong><em>Estimation</em></strong>: both accuracy (for \(T=0\)) and perplexity are deterministic and can be exactly calculated for a given model and task. Strictly speaking, \(pass@k\) is a value <strong><em>in expectation</em></strong> for a random sample of \(k\) generations from a model. This requires more care in how to best estimate it.</li>
+  <li><strong><em>Sensitivity to temperature</em></strong>: using \(T=0\) for \(k&gt;1\) would seem suboptimal since all generations will be identical. It is not intuitively clear which \(T\) is optimizes \(pass@k\) or if comparing two models at the same \(T\) is truly apples-to-apples. (Is it possible that model A beats model B at T=0.5 but model B wins at T=1? NOTE: I think this is provably possible, and might even be fairly common))</li>
+  <li><strong><em>Sensitivity to k</em></strong>: Likewise, \(pass@k\) can be thought of as curve over \(1 \leq\)k\(&lt; \infty\). It is not immediately obvious whether a particular set of \(k\) values provides the full picture when comparing two models.</li>
+</ol>
+
+<p>I developed a toy model to  dig deeper into the behavior of \(pass@k\) as a metric and provide guidance on how to use it to extract the most actionable signal for model development. The toy model is motivated by the following points that I want to better understand:</p>
+
+<ol>
+  <li>\(pass@k\) clearly depends on the strength of the model and the overall difficulty of the benchmark (the things we care most about), but it also depends on \(k\), \(T\), and the variance of difficulty of tasks in the benchmark set.</li>
+  <li>For a given \(k\), there is an optimal \(T\) that gives the highest \(pass@k\). I would guess that \(T=0\) is frequently optimal for \(k=1\), and assume that the higher \(k\) is, the higher the optimal \(T\) will be. (This is basically an exploration vs exploitation trade-off)</li>
+  <li>For a single task (at a fixed \(T\)) there is a simple relation \(pass@k = 1 - (1-pass@1)^k\)</li>
+  <li>However, we usually report the average \(pass@k\) over a benchmark (a set of tasks) and there is no obvious relationship between \(pass@k\) and \(pass@1\) for the full set</li>
+  <li>It is also not obvious how the \(pass@k\) curve will vary with \(T\) and what causes differences between different benchmarks. Do these things matter for choosing a useful metric to optimize?</li>
+</ol>
+
+<h1 id="toy-model">Toy Model</h1>
+
+<p>For any task prompt, assume there is some non-zero probability (at \(T&gt;0\)) that a given LLM will generate a correct solution. The probability of generating a specific token \(x_i\) scales with \(T\)  as:</p>
+
+\[p(x_i) \sim \exp(z_i / T)\]
+
+<p>(of course \(T\) also influences the normalization constant). Note the similarity to a zero-mean normal distribution:</p>
+
+\[p(x) \sim \exp(-x^2 / 2 \sigma^2)\]
+
+<p>Consider a discrete normal distribution (i.e. defined only on the integers \(\mathbb{Z}\)). This is equivalent to a softmax function over \(\mathbb{Z}\) where \(z_i = -x_i^2 / 2\) and \(T = \sigma^2\).</p>
+
+<p>Since the possible generations of an LLM form a countable set, we can view this distribution as a simplified representation of an LLM (where each integer represents one generation). In this vein, we can also create a simple representation of a task - we’ll say that a given task has a correct answer which is some integer \(c\). Then, for that task, we can generate/sample a random integer \(g\) from the model/distribution and we say it passes the task if \(g=c\). We can think of think of tasks with large \(\lvert c \rvert\) as “difficult”and tasks with small \(\lvert c \rvert\) as “easy”.</p>
+
+<p>This may seem like a strange analogy, since neither the model nor the task have any semantic meaning, but the key point is that every task has a correct answer and the model can generate it with some probability that depends on \(T\). It might also seem strange that each task does not condition on a task-specific prompt, i.e. we always generate from the same normal distribution. Again, I think that is all we need to capture the basic notion of “task difficulty”- we don’t need to flesh out the specific details of each task, what matters is that each task has a \(pass@1\) rate of \(p_{gen}(c \mid T)\).</p>
+
+<p>The final element of this toy model is that we want to create a set of evaluation tasks \(\{c_i\}\). As mentioned above, the scaling behavior of \(pass@k\) has a complex dependence on this “task difficulty distribution”. It’s not representative to just consider a scenario where \(c\) is the same for all tasks. I’ll create an evaluation set by sampling \(\{c_i\}\) from some distribution which I’ll call \(p_{task}(c)\) - not to be confused with \(p_{gen}\).</p>
+
+<p>\(p_{task}(c)\) can be a discrete normal distribution, but we can also sample tasks from:</p>
+
+<ul>
+  <li>an exponential distribution:  \(p_{task}(c = j) \sim \exp(-\lvert j \rvert/\sqrt{T_{task}})\)</li>
+  <li>a power law distribution: \(p_{task}(c = j) \sim \lvert j \rvert^{-\gamma}\)</li>
+  <li>(note that  \(p_{task}\) refers to the probability of selecting a task to be in the eval set, while \(p_{gen}\) refers to the probability of our model passing a task it is given.)</li>
+</ul>
+
+<h1 id="results">Results</h1>
+
+<p>A key issue for \(pass@k\) is the dependence on \(T\). For \(pass@1\) (that is, \(p_{gen}(c \mid T)\)) on a single task we can think of this as follows:</p>
+
+<ol>
+  <li>For \(T=0\), we often have \(p_{gen}(c)=0\) (if \(c\) is not the maximum-likelihood generation)</li>
+  <li>If we increase \(T\), then \(p_{gen}(c \mid T)\) will at first increase. Loosely speaking, the distribution is spreading out and probability mass “flows towards”c from the higher-likelihood values closer to the mode)</li>
+  <li>Eventually, \(p_{gen}(c \mid T)\) will reach some maximum value and decrease if we continue increasing \(T\). In this regime, we”re spreading out the distribution so much that more probability mass “flows away”from c towards the tails than “flows towards”it from the mode.</li>
+  <li>To give a concrete illustration: for a zero-mean normal distribution, \(p(x)\) attains its largest value when \(\sigma = \lvert x \rvert\). The image below (from <a href="https://en.wikipedia.org/wiki/Normal_distribution">Wikipedia</a>) should help illustrate this.</li>
+</ol>
+
+<p><img src="/assets/images_2025-06-01/image_17.png" alt="" width="500" /></p>
+
+<h2 id="how-does-the-optimal-t-for-an-eval-set-scale-with-k"><em>How does the optimal \(T\) for an eval set scale with k?</em></h2>
+
+<p>For a single task, the optimal \(T\) is the same for all \(k\) (as the above points show), but for a set of tasks the answer is not immediately obvious. I created an eval set by sampling tasks from a discrete normal distribution. I then calculated  \(T^*(k)\), the temperature which maximizes \(pass@k\) for each \(k\) (using Brent’s method).</p>
+
+<ul>
+  <li>One important observation is that as \(k \rightarrow \infty\), \(pass@k\) is dominated by the contribution of the most difficult task (i.e. the largest \(\lvert c \rvert\)). Asymptotically, the optimal \(T\) is the value that maximizes \(pass@1\) for this task.</li>
+  <li>At first I had planned to use this as a metric to compare different eval sets. However it is very noisy since it depends on the single most extreme task so I abandoned this idea.</li>
+  <li>I noticed that for intermediate values of \(k\), optimal temperature follows a smooth power law over several decades so I focused on this instead.</li>
+</ul>
+
+<h3 id="normally-distributed-task-difficulty">Normally Distributed Task Difficulty</h3>
+
+<p>On the left is the full plot for  \(T^*\)  vs \(k\). (\(task\_spread\) is the standard deviation of the task distribution). On the right I show only those points with \(0.03 &lt; pass@k &lt; 0.98\), to make the scaling regime clearer. \(T^*\) also follows a scaling law with respect to \(task\_spread\), as shown in the bottom plot.</p>
+
+<p><img src="/assets/images_2025-06-01/image_4.png" alt="" /></p>
+
+<p><img src="/assets/images_2025-06-01/image_5.png" alt="" /></p>
+
+<p><img src="/assets/images_2025-06-01/image_6.png" alt="" /></p>
+
+<p>I fit a regression to the data in this scaling regime and got the following relation (<em>s = task_spread</em>):</p>
+
+\[T^* \approx 0.264*k^{0.728}*s^{1.283} \text{ ; } R^2=0.9996\]
+
+<h3 id="exponentially-distributed-task-difficulty">Exponentially Distributed Task Difficulty</h3>
+
+<p>Next I did the same analysis where the tasks are drawn from an exponential distribution instead of a normal distribution. It turns out that the scaling exponents are different:</p>
+
+<p><img src="/assets/images_2025-06-01/image_7.png" alt="" /></p>
+
+<p><img src="/assets/images_2025-06-01/image_8.png" alt="" /></p>
+
+\[T^* \approx 0.117*k^{1.054}*s^{0.957} \text{ ; } R^2= 0.9989\]
+
+<p>To expand on this point - the optimal temperature for a given eval set does not only depend on the mean and variance of the task difficulty distribution, it also depends on the form of the tail.</p>
+
+<h3 id="power-law-distributed-task-difficulty">Power Law Distributed Task Difficulty</h3>
+
+<p>Following this finding, I look at tasks drawn from a (truncated) power law distribution, which should have even fatter tails. In this case the scaling behavior wrt \(k\) does not appear at low \(k\) and low \(pass@k\) rates. It only seems to  kick in at \(k \approx 20\). (Note: task_stddev_trunc is the equivalent of task_spread here. I calculated it from the actual truncated dist I used, since truncation has a much stronger effect on power law than on gaussian/exponential dists)</p>
+
+<p><img src="/assets/images_2025-06-01/image_9.png" alt="" /></p>
+
+<p><img src="/assets/images_2025-06-01/image_10.png" alt="" /></p>
+
+<h3 id="comparing-all-three-task-distributions">Comparing all three task distributions</h3>
+
+<p>When we compare the \(T^*(k)\) for each family the differences are striking. Reproducing the plots from the introduction below, we can tell a clear story. For instance, there are seemingly similar gaussian and power law task sets that have a similar \(pass@k\) for \(k&lt;10\). However, as we increase \(k\), performance on the gaussian set saturates quickly (say by \(k \sim O(100))\), requiring only a modest increase in \(T\) to pass the hardest tasks. But for the power law set, it is necessary to increase \(T\) by several orders of magnitude to maximize \(pass@k\) (to “chase after”the hardest tasks) and even then, \(pass@k\) rises slowly with \(k\).</p>
+
+<p><img src="/assets/images_2025-06-01/image.png" alt="" /></p>
+
+<p><img src="/assets/images_2025-06-01/image_1.png" alt="" /></p>
+
+<p><img src="/assets/images_2025-06-01/image_2.png" alt="" /></p>
+
+<p><img src="/assets/images_2025-06-01/image_3.png" alt="" /></p>
+
+<h2 id="deciding-how-large-to-make-k">Deciding how large to make k</h2>
+
+<p>When planning experiments it would be useful to be able to estimate the minimum value of \(k\) neccessary to reach a desired \(pass@k\) score. For instance, if we are using \(pass@k\) as a metric to compare models, we will typically get more statistical precision (in other words, information) when values we are comparing are centered around 0.5, rather than clustered closer to 0 or 1.
+The plots below show that in many cases there is a linear relationship \(\log(k) \sim \text{logit}(pass@k)\), thus it seems like we should be able to extrapolate from results at small \(k\).</p>
+
+<p><img src="/assets/images_2025-06-01/image_11.png" alt="" /></p>
+
+<p><img src="/assets/images_2025-06-01/image_12.png" alt="" /></p>
+
+<p><img src="/assets/images_2025-06-01/image_13.png" alt="" /></p>
+
+<p><em>Top left: Gaussian task distribution</em></p>
+
+<p><em>Top right: Exponential task distribution</em></p>
+
+<p><em>Bottom left: Power law task distribution</em></p>]]></content><author><name></name></author><category term="scaling" /></entry><entry><title type="html">Breaking Down DeepMind’s AlphaTensor</title><link href="http://localhost:4000/alphatensor/2023/07/13/alphatensor.html" rel="alternate" type="text/html" title="Breaking Down DeepMind’s AlphaTensor" /><published>2023-07-13T00:00:00-07:00</published><updated>2023-07-13T00:00:00-07:00</updated><id>http://localhost:4000/alphatensor/2023/07/13/alphatensor</id><content type="html" xml:base="http://localhost:4000/alphatensor/2023/07/13/alphatensor.html"><![CDATA[<ul id="markdown-toc">
   <li><a href="#doing-arithmetic-efficiently" id="markdown-toc-doing-arithmetic-efficiently">Doing Arithmetic Efficiently</a>    <ul>
       <li><a href="#matrix-multiplication" id="markdown-toc-matrix-multiplication">Matrix Multiplication</a></li>
       <li><a href="#matrix-multiplication-can-be-expressed-as-a-tensor" id="markdown-toc-matrix-multiplication-can-be-expressed-as-a-tensor">Matrix Multiplication can be Expressed as a Tensor</a></li>
