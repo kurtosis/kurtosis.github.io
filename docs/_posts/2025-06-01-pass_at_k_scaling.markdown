@@ -17,13 +17,16 @@ usemathjax: true
     - As $$k \rightarrow \infty$$ there is an asymptotic upper bound on $$T^*$$ that depends only on the single most difficult task in the eval set. (Theoretically, if we had an infinite eval set with no single "hardest" task then the $$T^*(k)$$ power law scaling would continue as  $$k \rightarrow \infty$$ because there would always be harder tasks to pass.)
 - However, **the $$T^*(k)$$  power law also depends on the details of the eval set, specifically the tail of the distribution of task difficulty**. The two plots below show $$T^*(k)$$ curves for increasingly fat-tailed families of eval distributions (Gaussian < exponential < power law). For more fat-tailed distributions, one should raise $$T$$ significantly more as $$k$$ increases. Note that this is true even when comparing distributions with the same mean and variance - it is only due to the shape of the tail.
 
-![](/assets/images_2025-06-01/image.png){: width="300"}
-
-![](/assets/images_2025-06-01/image_1.png){: width="300"}
-
-![](/assets/images_2025-06-01/image_2.png){: width="300"}
-
-![](/assets/images_2025-06-01/image_3.png){: width="300"}
+  <table>
+    <tr>
+      <td><img src="/assets/images_2025-06-01/image.png" width="300"></td>
+      <td><img src="/assets/images_2025-06-01/image_1.png" width="300"></td>
+    </tr>
+    <tr>
+      <td><img src="/assets/images_2025-06-01/image_2.png" width="300"></td>
+      <td><img src="/assets/images_2025-06-01/image_3.png" width="300"></td>
+    </tr>
+  </table>
 
 # Overview / Motivation
 
