@@ -68,27 +68,27 @@ $$
 
 Consider a discrete normal distribution (i.e. defined only on the integers $$\mathbb{Z}$$). This is equivalent to a softmax function over $$\mathbb{Z}$$ where $$z_i = -x_i^2 / 2$$ and $$T = \sigma^2$$.
 
-Since the possible generations of an LLM form a countable set, we can view this distribution as a simplified representation of an LLM (where each integer represents one generation). In this vein, we can also create a simple representation of a task - we'll say that a given task has a correct answer which is some integer $$c$$. Then, for that task, we can generate/sample a random integer $$g$$ from the model/distribution and we say it passes the task if $$g=c$$. We can think of think of tasks with large $$|c|$$ as "difficult"and tasks with small $$|c|$$ as "easy".
+Since the possible generations of an LLM form a countable set, we can view this distribution as a simplified representation of an LLM (where each integer represents one generation). In this vein, we can also create a simple representation of a task - we'll say that a given task has a correct answer which is some integer $$c$$. Then, for that task, we can generate/sample a random integer $$g$$ from the model/distribution and we say it passes the task if $$g=c$$. We can think of think of tasks with large $$\lvert c \rvert$$ as "difficult"and tasks with small $$\lvert c \rvert$$ as "easy".
 
-This may seem like a strange analogy, since neither the model nor the task have any semantic meaning, but that should not matter. The key mathematical point is that every task has a correct answer and the model can generate it with some probability that depends on $$T$$ as in the softmax function. It might also seem strange that each task does not condition on a task-specific prompt, i.e. we always generate from the same normal distribution. Again, I think that is all we need to capture the basic notion of "task difficulty"- we don't need to flesh out the specific details of each task, what matters is that each task has a $$pass@1$$ rate of $$p_{gen}(c|T)$$.
+This may seem like a strange analogy, since neither the model nor the task have any semantic meaning, but that should not matter. The key mathematical point is that every task has a correct answer and the model can generate it with some probability that depends on $$T$$ as in the softmax function. It might also seem strange that each task does not condition on a task-specific prompt, i.e. we always generate from the same normal distribution. Again, I think that is all we need to capture the basic notion of "task difficulty"- we don't need to flesh out the specific details of each task, what matters is that each task has a $$pass@1$$ rate of $$p_{gen}(c \mid T)$$.
 
 The final element of this toy model is that we want to create a benchmark or evaluation set of tasks $$\{c_i\}$$. As mentioned above, the scaling behavior of $$pass@k$$ has a complex dependence on this "task difficulty distribution". It"s not representative to just consider a scenario where $$c$$ is the same for all tasks. I"ll create an evaluation set by sampling $$\{c_i\}$$ from some distribution which I'll call $$p_{task}(c)$$ - not to be confused with $$p_{gen}$$.  
 
  $$p_{task}(c)$$ can be a discrete normal distribution, but we can also sample tasks from: 
 
-- an exponential distribution:  $$p_{task}(c = j) \sim \exp(-|j|/\sqrt{T})$$
-- a power law distribution: $$p_{task}(c = j) \sim |j|^{-\gamma}$$
+- an exponential distribution:  $$p_{task}(c = j) \sim \exp(-\lvert j \rvert/\sqrt{T})$$
+- a power law distribution: $$p_{task}(c = j) \sim \lvert j \rvert^{-\gamma}$$
     - (for the power law, $$T$$ is a more complicated polynomial function of $$\gamma$$)
 - (note that  $$p_{task}$$ refers to the probability of selecting a task to be in the eval set, while $$p_{gen}$$ refers to the probability of our model passing a task it is given.)
 
 # Results
 
-As I mentioned, a key issue for $$pass@k$$ is the dependence on $$T$$. For $$pass@1$$ (that is, $$p_{gen}(c|T)$$) on a single task we can think of this as follows:
+As I mentioned, a key issue for $$pass@k$$ is the dependence on $$T$$. For $$pass@1$$ (that is, $$p_{gen}(c \mid T)$$) on a single task we can think of this as follows:
 
 1. For $$T=0$$, we often have $$p_{gen}(c)=0$$ (if c is not the maximum-likelihood generation)
-2. If we raise T, then $$p_{gen}(c|T)$$ will at first increase. Loosely speaking, the distribution is spreading out and probability mass "flows towards"c from the higher-likelihood values closer to the mode) 
-3. Eventually, $$p_{gen}(c|T)$$ will reach some maximum value and decrease if we continue raising $$T$$. In this regime, we"re spreading out the distribution so much that more probability mass "flows away"from c towards the tails than "flows towards"it from the mode.
-4. To give a concrete illustration: for a zero-mean normal distribution, $$p(x)$$ attains its largest value when $$\sigma = |x|$$.
+2. If we raise T, then $$p_{gen}(c \mid T)$$ will at first increase. Loosely speaking, the distribution is spreading out and probability mass "flows towards"c from the higher-likelihood values closer to the mode) 
+3. Eventually, $$p_{gen}(c \mid T)$$ will reach some maximum value and decrease if we continue raising $$T$$. In this regime, we"re spreading out the distribution so much that more probability mass "flows away"from c towards the tails than "flows towards"it from the mode.
+4. To give a concrete illustration: for a zero-mean normal distribution, $$p(x)$$ attains its largest value when $$\sigma = \lvert x \rvert$$.
 
 ## *How does the optimal $$T$$ for an eval set scale with k?*
 
@@ -96,7 +96,7 @@ For a single task, the optimal $$T$$ is the same for all $$k$$ (as the above poi
 
 <aside>
 
-- One important observation is that as $$k \rightarrow \infty$$, $$pass@k$$ is dominated by the contribution of the most difficult task (i.e. the largest $$|c|$$). Asymptotically, the optimal $$T$$ is the value that maximizes $$pass@1$$ for this task.
+- One important observation is that as $$k \rightarrow \infty$$, $$pass@k$$ is dominated by the contribution of the most difficult task (i.e. the largest $$\lvert c \rvert$$). Asymptotically, the optimal $$T$$ is the value that maximizes $$pass@1$$ for this task.
 - At first I had planned to use this as a metric to compare different eval sets. However it is very noisy since it depends on the single most extreme task so I abandoned this idea.
 - I noticed that for intermediate values of k, optimal temperature follows a smooth power law over several decades so I focused on this instead.
 </aside>
