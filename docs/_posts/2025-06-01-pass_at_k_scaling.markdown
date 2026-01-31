@@ -14,7 +14,7 @@ usemathjax: true
 <aside>
 
 - Pass@k is a complicated metric to reason about because it has a nonlinear dependency on k and temperature (T), which (I think) cannot be factored into independent dependencies on k and T.
-- The optimal temperature $$T^\*$$ (which maximizes E(pass@k)) depends on k. I present results from a toy model to argue that $T^*(k)$ follows a power law over several decades of k.
+- The optimal temperature $T^*$ (which maximizes $\mathbb{E}[\text{pass@k}]$) depends on k. I present results from a toy model to argue that $T^*(k)$ follows a power law over several decades of k.
     - Crucially, this behavior occurs because eval sets contain tasks of varying difficulties. We do not see it if we evaluate only a single task. (A difficult task just means one with a low pass@1 rate.)
     - As $k \rightarrow \infin$ there is an asymptotic upper bound on $T^*$ that depends only on the single most difficult task in the eval set. (Theoretically, if we had an infinite eval set with no single ???hardest task??? then the $T^*(k)$ power law scaling would continue as  $k \rightarrow \infin$ because there would always be harder tasks to pass.)
 - However, **the $T^*(k)$  power law also depends on the details of the eval set, specifically the tail of the distribution of task difficulty**. The two plots below show $T^*(k)$ curves for increasingly fat-tailed families of eval distributions (Gaussian < exponential < power law). For more fat-tailed distributions, one should raise T significantly more as k increases. Note that this is true even when comparing distributions with the same mean and variance - it is only due to the shape of the tail.
