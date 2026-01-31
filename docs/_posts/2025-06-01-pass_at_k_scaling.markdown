@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "Scaling Laws for pass@k and temperature"
+title:  "Scaling Laws for Pass@k and Temperature"
 date:   2025-06-01
 categories: scaling
 usemathjax: true
@@ -11,16 +11,12 @@ usemathjax: true
 
 # Takeaways
 
-<aside>
-
 - Pass@k is a complicated metric to reason about because it has a nonlinear dependency on k and temperature (T), which (I think) cannot be factored into independent dependencies on k and T.
 - The optimal temperature $$T^*$$ (which maximizes $$\mathbb{E}[\text{pass@k}]$$) depends on k. I present results from a toy model to argue that $$T^*(k)$$ follows a power law over several decades of k.
     - Crucially, this behavior occurs because eval sets contain tasks of varying difficulties. We do not see it if we evaluate only a single task. (A difficult task just means one with a low pass@1 rate.)
-    - As $$k \rightarrow \infin$$ there is an asymptotic upper bound on $$T^*$$ that depends only on the single most difficult task in the eval set. (Theoretically, if we had an infinite eval set with no single ???hardest task??? then the $$T^*(k)$$ power law scaling would continue as  $$k \rightarrow \infin$$ because there would always be harder tasks to pass.)
+    - As $$k \rightarrow \infty$$ there is an asymptotic upper bound on $$T^*$$ that depends only on the single most difficult task in the eval set. (Theoretically, if we had an infinite eval set with no single ???hardest task??? then the $$T^*(k)$$ power law scaling would continue as  $$k \rightarrow \infty$$ because there would always be harder tasks to pass.)
 - However, **the $$T^*(k)$$  power law also depends on the details of the eval set, specifically the tail of the distribution of task difficulty**. The two plots below show $$T^*(k)$$ curves for increasingly fat-tailed families of eval distributions (Gaussian < exponential < power law). For more fat-tailed distributions, one should raise T significantly more as k increases. Note that this is true even when comparing distributions with the same mean and variance - it is only due to the shape of the tail.
 - As a next step, I will confirm whether the scaling behavior of LLMs on real coding benchmarks matches the predictions of this toy model.
-
-</aside>
 
 ![image.png](Labnote%20-%20Pass@k%20and%20temperature/image.png)
 
@@ -43,7 +39,7 @@ $pass@k$ would seem to be the most useful metric to estimate performance (and tr
 
 1. ***Estimation***: both accuracy (for T=0) and perplexity are deterministic and can be exactly calculated for a given model and task. Strictly speaking, pass@k is a value ***in expectation*** for a random sample of k generations from a model. This requires more care in how to best estimate it.
 2. ***Sensitivity to temperature***: using T=0 for k>1 is pointless since all generations will be identical. Any T>0 value can be used for pass@k and it is not intuitively clear which T is ???best??? or if comparing two models at the same T is truly ???apples-to-apples???. (Is it possible that model A beats model B at T=0.5 but model B wins at T=1? NOTE: I think this is provably possible, and might even be fairly common))
-3. ***Sensitivity to k***: Likewise, pass@k can be thought of as curve over $1 \leq k < \infin$. It is not immediately obvious whether a finite set of k???s provides the ???full picture??? when comparing two models.
+3. ***Sensitivity to k***: Likewise, pass@k can be thought of as curve over $1 \leq k < \infty$. It is not immediately obvious whether a finite set of k???s provides the ???full picture??? when comparing two models.
 
 I developed a toy model to  dig deeper into the behavior of pass@k as a metric and hopefully provide guidance on how to use it to extract the most actionable signal for model development. The toy model is motivated by the following points that I want to better understand:
 
@@ -101,7 +97,7 @@ For a single task, the optimal T is the same for all k (as the above points show
 
 <aside>
 
-- One important observation is that as $k \rightarrow \infin$, pass@k is dominated by the contribution of the most difficult task (i.e. the largest $|c|$). Asymptotically, the optimal T is the value that maximizes pass@1 for this task.
+- One important observation is that as $k \rightarrow \infty$, pass@k is dominated by the contribution of the most difficult task (i.e. the largest $|c|$). Asymptotically, the optimal T is the value that maximizes pass@1 for this task.
 - At first I had planned to use this as a metric to compare different eval sets. However it is very noisy since it depends on the single most extreme task so I abandoned this idea.
 - I noticed that for intermediate values of k, optimal temperature follows a smooth power law over several decades so I focused on this instead.
 </aside>
