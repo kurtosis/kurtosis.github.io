@@ -15,7 +15,7 @@ $$pass@k$$ is widely used for open-ended, verifiable benchmarks (e.g. code, form
 
 - The optimal temperature $$T^*$$ (that which maximizes $$\mathbb{E}[\text{pass@k}]$$) depends on $$k$$. $$T^*(k)$$ follows a power law over several decades of $$k$$.
     - This behavior arises because eval sets contain tasks of varying difficulties (a "difficult task" being one with a low $$pass@1$$). For a single task, $$T^*$$ is independent of $$k$$.
-    - As $$k \rightarrow \infty$$, $$T^*$$ has an asymptotic upper bound that depends only on the single most difficult task in the eval set. For an infinite eval set with no hardest task, the power law scaling would continue indefinitely.
+    - As $$k \rightarrow \infty$$, $$T^*$$ has an asymptotic upper bound that depends only on the single most difficult task in the eval set. For an infinite eval set (in other words, a task generating distribution) with no upper bound on task difficulty, the power law scaling would continue indefinitely.
 - **The scaling exponent of $$T^*(k)$$ is governed by the tail of the task difficulty distribution - not its mean or variance.** Gaussian, exponential, and power-law difficulty distributions yield qualitatively different $$T^*(k)$$ behavior, even when matched on the first two moments. Concretely, the $$k$$-exponent increases from 0.73 (Gaussian) to 1.05 (exponential), meaning temperature should scale roughly linearly with $$k$$ for exponential difficulty distributions but sub-linearly for Gaussian ones. The plots below show $$T^*(k)$$ curves for increasingly fat-tailed eval distributions (Gaussian < exponential < power law).
 
   <table>
