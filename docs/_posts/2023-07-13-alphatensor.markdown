@@ -6,7 +6,7 @@ categories: alphatensor
 usemathjax: true
 ---
 
-(NOTE: see recent post  on [scaling laws for pass@k](% post_url 2025-06-01-pass_at_k_scaling %}))
+(NOTE: see recent post  on [scaling laws for pass@k]({% post_url 2025-06-01-pass_at_k_scaling %}))
 
 * TOC
 {:toc}
