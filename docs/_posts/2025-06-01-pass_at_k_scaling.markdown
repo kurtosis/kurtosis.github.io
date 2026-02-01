@@ -11,11 +11,12 @@ usemathjax: true
 
 # Summary
 
-- $$pass@k$$ is a complicated metric to reason about because it has a nonlinear dependence on $$k$$ and temperature ($$T$$), which cannot easily be factored into independent dependences on $$k$$ and $$T$$.
-- The optimal temperature $$T^*$$ (that which maximizes $$\mathbb{E}[\text{pass@k}]$$) depends on $$k$$. I present results from a toy model showing that $$T^*(k)$$ follows a power law over several decades of $$k$$.
-    - Crucially, this behavior occurs because eval sets contain tasks of varying difficulties. We do not see it if we evaluate only a single task. (A "difficult task"" being defined as one with a low $$pass@1$$.)
-    - As $$k \rightarrow \infty$$ there is an asymptotic upper bound on $$T^*$$ that depends only on the single most difficult task in the eval set. (Theoretically, if we had an infinite eval set with no single "hardest" task then the $$T^*(k)$$ power law scaling would continue as  $$k \rightarrow \infty$$ because there would always be harder tasks to pass.)
-- However, **the $$T^*(k)$$  power law also depends on the details of the eval set, specifically the tail of the distribution of task difficulty**. The two plots below show $$T^*(k)$$ curves for increasingly fat-tailed families of eval distributions (Gaussian < exponential < power law). For more fat-tailed distributions, one should increase $$T$$ significantly more as $$k$$ increases. Note that this is true even when comparing distributions with the same mean and variance - it is only due to the shape of the tail.
+$$pass@k$$ is widely used for open-ended, verifiable benchmarks (e.g. code, formal proofs), but its nonlinear dependence on both $$k$$ and temperature $$T$$ makes it difficult to reason about. I use a toy model to study this dependence and find:
+
+- The optimal temperature $$T^*$$ (that which maximizes $$\mathbb{E}[\text{pass@k}]$$) depends on $$k$$. $$T^*(k)$$ follows a power law over several decades of $$k$$.
+    - This behavior arises because eval sets contain tasks of varying difficulties (a "difficult task" being one with a low $$pass@1$$). For a single task, $$T^*$$ is independent of $$k$$.
+    - As $$k \rightarrow \infty$$, $$T^*$$ has an asymptotic upper bound that depends only on the single most difficult task in the eval set. For an infinite eval set with no hardest task, the power law scaling would continue indefinitely.
+- **The scaling exponent of $$T^*(k)$$ is governed by the tail of the task difficulty distribution - not its mean or variance.** Gaussian, exponential, and power-law difficulty distributions yield qualitatively different $$T^*(k)$$ behavior, even when matched on the first two moments. Concretely, the $$k$$-exponent increases from 0.73 (Gaussian) to 1.05 (exponential), meaning temperature should scale roughly linearly with $$k$$ for exponential difficulty distributions but sub-linearly for Gaussian ones. The plots below show $$T^*(k)$$ curves for increasingly fat-tailed eval distributions (Gaussian < exponential < power law).
 
   <table>
     <tr>
@@ -28,38 +29,31 @@ usemathjax: true
     </tr>
   </table>
 
-# Overview / Motivation
+# Motivation
 
-$$pass@k$$ is a widely used metric for AI benchmarks where i) model output is open-ended  with many possible formulations of a "correct" generation and ii) it is feasible to automatically verify solutions at scale. Code is one prominent domain where this is the case, and formal proofs are another (using Lean for verification). This class of benchmarks is distinct from benchmarks where valid answers must come from a limited set (e.g. multiple choice or math benchmarks where the answer must be an integer between 0 and 999) or short-form knowledge benchmarks, where there is unlikely to be much variation in correct responses (e.g. "What is the capital of France"?)
+Unlike greedy accuracy (binary per task, insensitive at low solve rates) or perplexity (dependent on a specific reference solution), $$pass@k$$ is continuous-valued, increases with $$k$$, and can be estimated to arbitrary precision.
 
-For these simpler benchmarks, $$accuracy$$ (which I define here as $$pass@1$$ for $$T=0$$) and $$perplexity$$ (of a correct reference solution) may be sufficient metrics to estimate model capabilities. However they have shortcomings on open-ended benchmarks:
+However, $$pass@k$$ introduces challenges that simpler metrics avoid:
 
-1. Accuracy is a binary variable for each task. For challenging benchmarks (or weak models) the average value may be very low (even zero), meaning that it is less sensitive to model improvements and has wide confidence intervals. By contrast, $$\mathbb{E}[\text{pass@k}]$$ is continuous-valued  for each task, increases with $$k$$, and can be estimated to arbitrarily high precision by producing $$ n > k$$ generations.
-2. Perplexity is calculated on one (or at best, a few) reference solutions. Any coding task has a large number of correct solutions, due to trivial style variations (such as variable names), and possibly more significant algorithmic variations as well. During training, a model may learn to solve a task in a particular way which is not well reflected in the reference solution (imagine a model that always uses snake case while the provided solutions are in camel case).
+1. ***Sensitivity to temperature***: using $$T=0$$ for $$k>1$$ is suboptimal since all generations will be identical. It is not clear which $$T$$ optimizes $$pass@k$$, or whether comparing two models at the same $$T$$ is apples-to-apples. (Model A may beat model B at $$T=0.5$$ while model B wins at $$T=1$$.)
+2. ***Sensitivity to k***: $$pass@k$$ is a curve over $$1 \leq k < \infty$$. It is not obvious whether a particular set of $$k$$ values provides the full picture when comparing two models.
+3. ***Nonlinear interaction***: $$pass@k$$ has a nonlinear dependence on $$k$$ and $$T$$ that cannot easily be factored into independent effects, making it difficult to reason about analytically.
 
-$$pass@k$$ would seem to be the most useful metric to estimate performance (and track improvement) on open-ended, verifiable tasks. However, it brings some distinct challenges:
+I developed a toy model to isolate how $$pass@k$$ depends on $$k$$, $$T$$, and the distribution of task difficulties across an eval set. The key questions:
 
-1. ***Estimation***: both accuracy (for $$T=0$$) and perplexity are deterministic and can be exactly calculated for a given model and task. Strictly speaking, $$pass@k$$ is a value ***in expectation*** for a random sample of $$k$$ generations from a model. This requires more care in how to best estimate it.
-2. ***Sensitivity to temperature***: using $$T=0$$ for $$k>1$$ would seem suboptimal since all generations will be identical. It is not intuitively clear which $$T$$ is optimizes $$pass@k$$ or if comparing two models at the same $$T$$ is truly apples-to-apples. (Is it possible that model A beats model B at T=0.5 but model B wins at T=1? NOTE: I think this is provably possible, and might even be fairly common))
-3. ***Sensitivity to k***: Likewise, $$pass@k$$ can be thought of as curve over $$1 \leq $$k$$ < \infty$$. It is not immediately obvious whether a particular set of $$k$$ values provides the full picture when comparing two models.
-
-I developed a toy model to  dig deeper into the behavior of $$pass@k$$ as a metric and provide guidance on how to use it to extract the most actionable signal for model development. The toy model is motivated by the following points that I want to better understand:
-
-1. $$pass@k$$ clearly depends on the strength of the model and the overall difficulty of the benchmark (the things we care most about), but it also depends on $$k$$, $$T$$, and the variance of difficulty of tasks in the benchmark set.
-2. For a given $$k$$, there is an optimal $$T$$ that gives the highest $$pass@k$$. I would guess that $$T=0$$ is frequently optimal for $$k=1$$, and assume that the higher $$k$$ is, the higher the optimal $$T$$ will be. (This is basically an exploration vs exploitation trade-off)
-3. For a single task (at a fixed $$T$$) there is a simple relation $$pass@k = 1 - (1-pass@1)^k$$
-4. However, we usually report the average $$pass@k$$ over a benchmark (a set of tasks) and there is no obvious relationship between $$pass@k$$ and $$pass@1$$ for the full set
-5. It is also not obvious how the $$pass@k$$ curve will vary with $$T$$ and what causes differences between different benchmarks. Do these things matter for choosing a useful metric to optimize?
+1. For a single task, $$pass@k = 1 - (1-pass@1)^k$$. But we report the average over a benchmark - how does the $$pass@k$$ curve behave for a set of tasks with varying difficulty?
+2. For a given $$k$$, there is an optimal $$T$$ that maximizes $$pass@k$$ (an exploration vs. exploitation trade-off). How does $$T^*(k)$$ scale?
+3. Does the shape of the task difficulty distribution matter, beyond its mean and variance?
 
 # Toy Model
 
-For any task prompt, assume there is some non-zero probability (at $$T>0$$) that a given LLM will generate a correct solution. The probability of generating a specific token $$x_i$$ scales with $$T$$  as:
+For any task prompt, assume there is some non-zero probability (at $$T>0$$) that a given LLM will generate a correct solution. The probability of generating a specific token $$x_i$$ scales with $$T$$ as:
 
 $$
 p(x_i) \sim \exp(z_i / T)
 $$
 
-(of course $$T$$ also influences the normalization constant). Note the similarity to a zero-mean normal distribution:
+(where $$T$$ also influences the normalization constant). Note the similarity to a zero-mean normal distribution:
 
 $$
 p(x) \sim \exp(-x^2 / 2 \sigma^2)
@@ -67,102 +61,145 @@ $$
 
 Consider a discrete normal distribution (i.e. defined only on the integers $$\mathbb{Z}$$). This is equivalent to a softmax function over $$\mathbb{Z}$$ where $$z_i = -x_i^2 / 2$$ and $$T = \sigma^2$$.
 
-Since the possible generations of an LLM form a countable set, we can view this distribution as a simplified representation of an LLM (where each integer represents one generation). In this vein, we can also create a simple representation of a task - we'll say that a given task has a correct answer which is some integer $$c$$. Then, for that task, we can generate/sample a random integer $$g$$ from the model/distribution and we say it passes the task if $$g=c$$. We can think of think of tasks with large $$\lvert c \rvert$$ as "difficult"and tasks with small $$\lvert c \rvert$$ as "easy".
+Since the possible generations of an LLM form a countable set, we can view this distribution as a simplified representation of an LLM (where each integer represents one generation). A task is represented by an integer $$c$$: we sample a random integer $$g$$ from the model distribution and say it passes if $$g=c$$. Tasks with large $$\lvert c \rvert$$ are "difficult" (low probability under the model) and tasks with small $$\lvert c \rvert$$ are "easy."
 
-This may seem like a strange analogy, since neither the model nor the task have any semantic meaning, but the key point is that every task has a correct answer and the model can generate it with some probability that depends on $$T$$. It might also seem strange that each task does not condition on a task-specific prompt, i.e. we always generate from the same normal distribution. Again, I think that is all we need to capture the basic notion of "task difficulty"- we don't need to flesh out the specific details of each task, what matters is that each task has a $$pass@1$$ rate of $$p_{gen}(c \mid T)$$.
+The model intentionally strips away semantic content to isolate the dependence of $$pass@k$$ on temperature, sample count, and the distribution of task difficulties. The absence of task-specific prompts (i.e. we always generate from the same distribution) is not a limitation - what matters is that each task has a $$pass@1$$ rate of $$p_{gen}(c \mid T)$$ that depends on its difficulty $$\lvert c \rvert$$ and the temperature $$T$$.
 
-The final element of this toy model is that we want to create a set of evaluation tasks $$\{c_i\}$$. As mentioned above, the scaling behavior of $$pass@k$$ has a complex dependence on this "task difficulty distribution". It's not representative to just consider a scenario where $$c$$ is the same for all tasks. I'll create an evaluation set by sampling $$\{c_i\}$$ from some distribution which I'll call $$p_{task}(c)$$ - not to be confused with $$p_{gen}$$.  
+The final element is the evaluation set $$\{c_i\}$$. The task difficulties are sampled from a distribution $$p_{task}(c)$$ (not to be confused with the generation distribution $$p_{gen}$$). I consider three families:
 
- $$p_{task}(c)$$ can be a discrete normal distribution, but we can also sample tasks from: 
+| Task distribution | Form | Key parameter |
+|---|---|---|
+| Gaussian | $$p_{task}(c=j) \sim \exp(-j^2 / 2\sigma_{task}^2)$$ | $$\sigma_{task}$$ (task_spread) |
+| Exponential | $$p_{task}(c=j) \sim \exp(-\lvert j \rvert / \sqrt{T_{task}})$$ | $$T_{task}$$ |
+| Power law | $$p_{task}(c=j) \sim \lvert j \rvert^{-\gamma}$$ | $$\gamma$$ |
 
-- an exponential distribution:  $$p_{task}(c = j) \sim \exp(-\lvert j \rvert/\sqrt{T_{task}})$$
-- a power law distribution: $$p_{task}(c = j) \sim \lvert j \rvert^{-\gamma}$$
-- (note that  $$p_{task}$$ refers to the probability of selecting a task to be in the eval set, while $$p_{gen}$$ refers to the probability of our model passing a task it is given.)
+These families have increasingly fat tails, allowing us to test whether the tail shape - independent of the first two moments - affects the scaling of $$T^*(k)$$.
 
 # Results
 
-A key issue for $$pass@k$$ is the dependence on $$T$$. For $$pass@1$$ (that is, $$p_{gen}(c \mid T)$$) on a single task we can think of this as follows:
+## Temperature dependence for a single task
 
-1. For $$T=0$$, we often have $$p_{gen}(c)=0$$ (if $$c$$ is not the maximum-likelihood generation)
-2. If we increase $$T$$, then $$p_{gen}(c \mid T)$$ will at first increase. Loosely speaking, the distribution is spreading out and probability mass "flows towards"c from the higher-likelihood values closer to the mode) 
-3. Eventually, $$p_{gen}(c \mid T)$$ will reach some maximum value and decrease if we continue increasing $$T$$. In this regime, we"re spreading out the distribution so much that more probability mass "flows away"from c towards the tails than "flows towards"it from the mode.
-4. To give a concrete illustration: for a zero-mean normal distribution, $$p(x)$$ attains its largest value when $$\sigma = \lvert x \rvert$$. The image below (from [Wikipedia](https://en.wikipedia.org/wiki/Normal_distribution)) should help illustrate this.
+Before examining eval sets, it is useful to understand how $$pass@1$$ depends on $$T$$ for a single task. For $$p_{gen}(c \mid T)$$:
 
-![](/assets/images_2025-06-01/image_17.png){: width="500"}
+1. At $$T=0$$, $$p_{gen}(c)=0$$ unless $$c$$ is the maximum-likelihood generation.
+2. As $$T$$ increases, probability mass spreads from the mode toward $$c$$, increasing $$p_{gen}(c \mid T)$$.
+3. Beyond some optimal $$T$$, more mass flows away from $$c$$ toward the tails than flows in from the mode, and $$p_{gen}(c \mid T)$$ decreases.
+4. Concretely, for a zero-mean normal distribution, $$p(x)$$ is maximized when $$\sigma = \lvert x \rvert$$. The plot below illustrates this - compare the values of each curve at $$x=1$$:
 
+<figure>
+<img src="/assets/images_2025-06-01/image_17.png" width="500" />
+<figcaption style="font-size: 0.85em; color: #666;">Source: <a href="https://en.wikipedia.org/wiki/Normal_distribution">Wikipedia</a></figcaption>
+</figure>
 
-## *How does the optimal $$T$$ for an eval set scale with k?*
+For a single task, this optimal $$T$$ is independent of $$k$$ (since $$pass@k = 1-(1-pass@1)^k$$ is monotonically increasing in $$pass@1$$).
 
-For a single task, the optimal $$T$$ is the same for all $$k$$ (as the above points show), but for a set of tasks the answer is not immediately obvious. I created an eval set by sampling tasks from a discrete normal distribution. I then calculated  $$T^*(k)$$, the temperature which maximizes $$pass@k$$ for each $$k$$ (using Brent's method).
+## How does $$T^*$$ scale with $$k$$ for an eval set?
 
-- One important observation is that as $$k \rightarrow \infty$$, $$pass@k$$ is dominated by the contribution of the most difficult task (i.e. the largest $$\lvert c \rvert$$). Asymptotically, the optimal $$T$$ is the value that maximizes $$pass@1$$ for this task.
-- At first I had planned to use this as a metric to compare different eval sets. However it is very noisy since it depends on the single most extreme task so I abandoned this idea.
-- I noticed that for intermediate values of $$k$$, optimal temperature follows a smooth power law over several decades so I focused on this instead.
+For a set of tasks the answer is different. I created eval sets by sampling tasks from each distribution family and calculated $$T^*(k)$$ - the temperature maximizing $$pass@k$$ for each $$k$$ - using Brent's method.
 
-### Normally Distributed Task Difficulty
+Key observations:
+- As $$k \rightarrow \infty$$, $$pass@k$$ is dominated by the most difficult task (the largest $$\lvert c \rvert$$). Asymptotically, $$T^*$$ converges to the value that maximizes $$pass@1$$ for that task. This asymptotic value is noisy since it depends on a single extreme task.
+- For intermediate values of $$k$$, $$T^*$$ follows a smooth power law over several decades - this is the scaling regime I focus on.
 
-On the left is the full plot for  $$T^*$$  vs $$k$$. ($$task\_spread$$ is the standard deviation of the task distribution). On the right I show only those points with $$0.03 < pass@k < 0.98$$, to make the scaling regime clearer. $$T^*$$ also follows a scaling law with respect to $$task\_spread$$, as shown in the bottom plot.
+### Gaussian task difficulty
 
-![](/assets/images_2025-06-01/image_4.png)
+The left plot shows the full $$T^*$$ vs $$k$$ curve ($$task\_spread$$ is the standard deviation of the task distribution). The right plot shows only points with $$0.03 < pass@k < 0.98$$, isolating the scaling regime. The bottom plot shows that $$T^*$$ also follows a scaling law with respect to $$task\_spread$$.
 
-![](/assets/images_2025-06-01/image_5.png)
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+  <div>
+    <img src="/assets/images_2025-06-01/image_4.png" />
+  </div>
+  <div>
+    <img src="/assets/images_2025-06-01/image_5.png" />
+  </div>
+  <div>
+    <img src="/assets/images_2025-06-01/image_6.png" />
+  </div>
+  <div></div>
+</div>
 
-![](/assets/images_2025-06-01/image_6.png)
-
-I fit a regression to the data in this scaling regime and got the following relation (*s = task_spread*):
+Fitting a regression in this scaling regime (*s = task_spread*):
 
 $$
-T^* \approx 0.264*k^{0.728}*s^{1.283} \text{ ; } R^2=0.9996
+T^* \approx 0.264 \cdot k^{0.728} \cdot s^{1.283} \text{ ; } R^2=0.9996
 $$
 
-### Exponentially Distributed Task Difficulty
+### Exponential task difficulty
 
-Next I did the same analysis where the tasks are drawn from an exponential distribution instead of a normal distribution. It turns out that the scaling exponents are different: 
+The same analysis with tasks drawn from an exponential distribution yields different scaling exponents:
 
-![](/assets/images_2025-06-01/image_7.png)
-
-![](/assets/images_2025-06-01/image_8.png)
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+  <div>
+    <img src="/assets/images_2025-06-01/image_7.png" />
+  </div>
+  <div>
+    <img src="/assets/images_2025-06-01/image_8.png" />
+  </div>
+</div>
 
 $$
-T^* \approx 0.117*k^{1.054}*s^{0.957} \text{ ; } R^2= 0.9989
+T^* \approx 0.117 \cdot k^{1.054} \cdot s^{0.957} \text{ ; } R^2= 0.9989
 $$
 
-To expand on this point - the optimal temperature for a given eval set does not only depend on the mean and variance of the task difficulty distribution, it also depends on the form of the tail.
+The $$k$$-exponent increases from 0.73 to 1.05 - temperature must scale approximately linearly with $$k$$ for exponentially-distributed task difficulties, compared to sub-linearly for Gaussian. This points to the central finding: **the optimal temperature for a given eval set does not only depend on the mean and variance of the task difficulty distribution - it depends on the form of the tail.** Two eval sets with identical first and second moments but different tail shapes will require qualitatively different temperature-scaling strategies as $$k$$ grows.
 
-### Power Law Distributed Task Difficulty
+### Power-law task difficulty
 
-Following this finding, I look at tasks drawn from a (truncated) power law distribution, which should have even fatter tails. In this case the scaling behavior wrt $$k$$ does not appear at low $$k$$ and low $$pass@k$$ rates. It only seems to  kick in at $$k \approx 20$$. (Note: task_stddev_trunc is the equivalent of task_spread here. I calculated it from the actual truncated dist I used, since truncation has a much stronger effect on power law than on gaussian/exponential dists)
+Power-law distributions have even fatter tails, providing a further test of this finding. Here the scaling behavior with respect to $$k$$ does not appear at low $$k$$ and low $$pass@k$$ rates - it only emerges at $$k \approx 20$$. (Note: task_stddev_trunc is the equivalent of task_spread here, calculated from the actual truncated distribution since truncation has a much stronger effect on power-law than on Gaussian/exponential distributions.)
 
-![](/assets/images_2025-06-01/image_9.png)
-
-![](/assets/images_2025-06-01/image_10.png)
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+  <div>
+    <img src="/assets/images_2025-06-01/image_9.png" />
+  </div>
+  <div>
+    <img src="/assets/images_2025-06-01/image_10.png" />
+  </div>
+</div>
 
 ### Comparing all three task distributions
 
-When we compare the $$T^*(k)$$ for each family the differences are striking. Reproducing the plots from the introduction below, we can tell a clear story. For instance, there are seemingly similar gaussian and power law task sets that have a similar $$pass@k$$ for $$k<10$$. However, as we increase $$k$$, performance on the gaussian set saturates quickly (say by $$k \sim O(100))$$, requiring only a modest increase in $$T$$ to pass the hardest tasks. But for the power law set, it is necessary to increase $$T$$ by several orders of magnitude to maximize $$pass@k$$ (to "chase after"the hardest tasks) and even then, $$pass@k$$ rises slowly with $$k$$.
+The plots below overlay $$T^*(k)$$ for all three distribution families. Gaussian and power-law task sets can have similar $$pass@k$$ for $$k<10$$, but diverge sharply at larger $$k$$. Performance on the Gaussian set saturates by $$k \sim O(100)$$, requiring only a modest increase in $$T$$ to pass the hardest tasks. For the power-law set, $$T$$ must increase by several orders of magnitude to reach the hardest tasks, and even then $$pass@k$$ rises slowly with $$k$$.
 
-![](/assets/images_2025-06-01/image.png)
-
-![](/assets/images_2025-06-01/image_1.png)
-
-![](/assets/images_2025-06-01/image_2.png)
-
-![](/assets/images_2025-06-01/image_3.png)
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+  <div>
+    <img src="/assets/images_2025-06-01/image.png" />
+  </div>
+  <div>
+    <img src="/assets/images_2025-06-01/image_1.png" />
+  </div>
+  <div>
+    <img src="/assets/images_2025-06-01/image_2.png" />
+  </div>
+  <div>
+    <img src="/assets/images_2025-06-01/image_3.png" />
+  </div>
+</div>
 
 ## Deciding how large to make k
 
-When planning experiments it would be useful to be able to estimate the minimum value of $$k$$ neccessary to reach a desired $$pass@k$$ score. For instance, if we are using $$pass@k$$ as a metric to compare models, we will typically get more statistical precision (in other words, information) when values we are comparing are centered around 0.5, rather than clustered closer to 0 or 1.
-The plots below show that in many cases there is a linear relationship $$\log(k) \sim \text{logit}(pass@k)$$, thus it seems like we should be able to extrapolate from results at small $$k$$.
+When planning experiments it is useful to estimate the minimum $$k$$ necessary to reach a desired $$pass@k$$ score. Comparisons between models are most informative when $$pass@k$$ values are near 0.5 rather than clustered near 0 or 1. The plots below show that in many cases there is a linear relationship $$\log(k) \sim \text{logit}(pass@k)$$. This suggests that $$pass@k$$ for large $$k$$ can be extrapolated from a small number of samples, substantially reducing compute requirements.
 
-![](/assets/images_2025-06-01/image_11.png)
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+  <div>
+    <img src="/assets/images_2025-06-01/image_11.png" />
+    <p><em>Gaussian task distribution</em></p>
+  </div>
+  <div>
+    <img src="/assets/images_2025-06-01/image_12.png" />
+    <p><em>Exponential task distribution</em></p>
+  </div>
+  <div>
+    <img src="/assets/images_2025-06-01/image_13.png" />
+    <p><em>Power law task distribution</em></p>
+  </div>
+  <div></div>
+</div>
 
-![](/assets/images_2025-06-01/image_12.png)
+# Implications
 
-![](/assets/images_2025-06-01/image_13.png)
+The main practical takeaways from this analysis:
 
-*Top left: Gaussian task distribution*
-
-*Top right: Exponential task distribution*
-
-*Bottom left: Power law task distribution*
-
+- **Temperature tuning for pass@k should account for the difficulty distribution of the eval set.** Using a fixed temperature across benchmarks with different tail characteristics will be systematically suboptimal. Fat-tailed benchmarks (where a few tasks are much harder than the rest) require substantially higher temperatures at large $$k$$.
+- **The $$k$$-exponent of $$T^*(k)$$ serves as a fingerprint of the eval set's difficulty distribution.** Measuring this exponent on a real benchmark could reveal whether its difficulty distribution is closer to Gaussian, exponential, or power-law - information that is otherwise hard to extract.
+- **Extrapolating pass@k via the log-logit relationship** could reduce the number of generations needed to estimate performance at large $$k$$, making high-$$k$$ evaluation more practical.
+- **When comparing models on pass@k, the choice of $$k$$ and $$T$$ is not neutral.** Two models may rank differently depending on these choices, and the degree to which rankings are sensitive to $$(k, T)$$ depends on the tail of the benchmark's difficulty distribution.
