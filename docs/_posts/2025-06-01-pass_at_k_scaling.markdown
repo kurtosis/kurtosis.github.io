@@ -82,8 +82,8 @@ These families have increasingly fat tails, allowing us to test whether the tail
 Before examining eval sets, it is useful to understand how $$pass@1$$ depends on $$T$$ for a single task. For $$p_{gen}(c \mid T)$$:
 
 1. At $$T=0$$, $$p_{gen}(c)=0$$ unless $$c$$ is the maximum-likelihood generation.
-2. As $$T$$ increases, probability mass spreads from the mode toward $$c$$, increasing $$p_{gen}(c \mid T)$$.
-3. Beyond some optimal $$T$$, more mass flows away from $$c$$ toward the tails than flows to $$c$$ from the mode, and $$p_{gen}(c \mid T)$$ decreases.
+2. As $$T$$ increases, probability mass initially spreads from the mode toward $$c$$, increasing $$p_{gen}(c \mid T)$$.
+3. Increasing beyond some optimal $$T$$, more mass flows away from $$c$$ toward the tails than flows to $$c$$ from the mode, and $$p_{gen}(c \mid T)$$ decreases.
 4. Concretely, for a zero-mean normal distribution, $$p(x)$$ is maximized when $$\sigma = \lvert x \rvert$$. The plot below illustrates this - compare the values of each curve at $$x=1$$:
 
 <figure>
